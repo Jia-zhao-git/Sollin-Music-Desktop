@@ -37,7 +37,6 @@ import { usePlaybackProgressStore } from '@/stores/playbackProgressStore'
 const Home = lazy(() => import('@/pages/Home'))
 const Search = lazy(() => import('@/pages/Search'))
 const LocalMusic = lazy(() => import('@/pages/LocalMusic'))
-const Library = lazy(() => import('@/pages/Library'))
 const Favorites = lazy(() => import('@/pages/Favorites'))
 const LocalFavorites = lazy(() => import('@/pages/LocalFavorites'))
 const Recent = lazy(() => import('@/pages/Recent'))
@@ -55,6 +54,11 @@ const ArtistDetail = lazy(() => import('@/pages/ArtistDetail'))
 const AlbumDetail = lazy(() => import('@/pages/AlbumDetail'))
 const PlaylistExplore = lazy(() => import('@/pages/PlaylistExplore'))
 const DailyRecommend = lazy(() => import('@/pages/DailyRecommend'))
+const VideoHome = lazy(() => import('@/pages/VideoHome'))
+const VideoDetail = lazy(() => import('@/pages/VideoDetail'))
+const NovelHome = lazy(() => import('@/pages/NovelHome'))
+const NovelDetail = lazy(() => import('@/pages/NovelDetail'))
+const NovelReader = lazy(() => import('@/pages/NovelReader'))
 
 function App() {
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -524,9 +528,10 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Suspense><Home /></Suspense>} />
+          <Route path="discover" element={<Suspense><Home /></Suspense>} />
           <Route path="local" element={<Suspense><LocalMusic /></Suspense>} />
           <Route path="search" element={<Suspense><Search /></Suspense>} />
-          <Route path="library" element={<Suspense><Library /></Suspense>} />
+          <Route path="library" element={<Suspense><LocalMusic /></Suspense>} />
           <Route path="favorites" element={<Suspense><Favorites /></Suspense>} />
           <Route path="local-favorites" element={<Suspense><LocalFavorites /></Suspense>} />
           <Route path="recent" element={<Suspense><Recent /></Suspense>} />
@@ -544,6 +549,11 @@ function App() {
           <Route path="album/:id" element={<Suspense><AlbumDetail /></Suspense>} />
           <Route path="playlist-explore" element={<Suspense><PlaylistExplore /></Suspense>} />
           <Route path="daily-recommend" element={<Suspense><DailyRecommend /></Suspense>} />
+          <Route path="video" element={<Suspense><VideoHome /></Suspense>} />
+          <Route path="video/:id" element={<Suspense><VideoDetail /></Suspense>} />
+          <Route path="novel" element={<Suspense><NovelHome /></Suspense>} />
+          <Route path="novel/:id" element={<Suspense><NovelDetail /></Suspense>} />
+          <Route path="novel/:id/chapter/:chapterId" element={<Suspense><NovelReader /></Suspense>} />
         </Route>
       </Routes>
 

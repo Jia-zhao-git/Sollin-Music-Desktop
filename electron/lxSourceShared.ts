@@ -1,6 +1,8 @@
 export const LX_SOURCE_PUBLIC_IPC = {
   getStatus: 'lx-source:get-status',
   setScriptPath: 'lx-source:set-script-path',
+  importScriptFolder: 'lx-source:import-script-folder',
+  testSource: 'lx-source:test-source',
   pickScriptPath: 'lx-source:pick-script-path',
   importScriptUrl: 'lx-source:import-script-url',
   exportBackupState: 'lx-source:export-backup-state',

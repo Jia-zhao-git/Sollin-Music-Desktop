@@ -167,6 +167,8 @@ type GlobalShortcutState = {
 const LX_SOURCE_PUBLIC_IPC = {
   getStatus: 'lx-source:get-status',
   setScriptPath: 'lx-source:set-script-path',
+  importScriptFolder: 'lx-source:import-script-folder',
+  testSource: 'lx-source:test-source',
   pickScriptPath: 'lx-source:pick-script-path',
   importScriptUrl: 'lx-source:import-script-url',
   exportBackupState: 'lx-source:export-backup-state',
@@ -327,6 +329,8 @@ const electronAPI = {
 
   getLxSourceStatus: () => ipcRenderer.invoke(LX_SOURCE_PUBLIC_IPC.getStatus),
   setLxSourceScriptPath: (path: string) => ipcRenderer.invoke(LX_SOURCE_PUBLIC_IPC.setScriptPath, path),
+  importLxSourceScriptFolder: (path: string) => ipcRenderer.invoke(LX_SOURCE_PUBLIC_IPC.importScriptFolder, path),
+  testLxSource: (sourceId?: string | null) => ipcRenderer.invoke(LX_SOURCE_PUBLIC_IPC.testSource, sourceId ?? null),
   pickLxSourceScriptPath: () => ipcRenderer.invoke(LX_SOURCE_PUBLIC_IPC.pickScriptPath),
   importLxSourceScriptUrl: (url: string) => ipcRenderer.invoke(LX_SOURCE_PUBLIC_IPC.importScriptUrl, url),
   exportLxSourceBackupState: () => ipcRenderer.invoke(LX_SOURCE_PUBLIC_IPC.exportBackupState),
@@ -474,8 +478,10 @@ declare global {
       decodeKwLyric: (payload: { lrcBase64: string; isGetLyricx: boolean }) => Promise<string>
       decodeKrcLyric: (data: string) => Promise<string>
       getLxSourceStatus: () => Promise<any>
-      setLxSourceScriptPath: (path: string) => Promise<any>
-      pickLxSourceScriptPath: () => Promise<string | null>
+    setLxSourceScriptPath: (path: string) => Promise<any>
+    importLxSourceScriptFolder: (path: string) => Promise<any>
+    testLxSource: (sourceId?: string | null) => Promise<any>
+    pickLxSourceScriptPath: () => Promise<string | null>
       importLxSourceScriptUrl: (url: string) => Promise<any>
       exportLxSourceBackupState: () => Promise<any>
       restoreLxSourceBackupState: (payload: unknown) => Promise<any>

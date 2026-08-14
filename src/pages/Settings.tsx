@@ -30,6 +30,7 @@ import {
   ArrowUp,
   ArrowDown,
   Play,
+  Zap,
   Sliders,
   Settings as SettingsIcon,
   Image,
@@ -561,6 +562,7 @@ export default function Settings() {
   const [isLoadingLxSourceStatus, setIsLoadingLxSourceStatus] = useState(false)
   const [isSavingLxSourcePath, setIsSavingLxSourcePath] = useState(false)
   const [isImportingLxSourceUrl, setIsImportingLxSourceUrl] = useState(false)
+  const [isTestingLxSources, setIsTestingLxSources] = useState(false)
   const [isSavingLxSourceUpdateAlert, setIsSavingLxSourceUpdateAlert] = useState(false)
   const [activeLxSourceActionId, setActiveLxSourceActionId] = useState<string | null>(null)
   const [removeLxSourceActionId, setRemoveLxSourceActionId] = useState<string | null>(null)
@@ -746,12 +748,36 @@ export default function Settings() {
       const nextPath = await lxSourceApi.pickScriptPath()
       if (!nextPath) return
       setLxScriptPathInput(nextPath)
-      addToast({ type: 'success', message: '已选择音源脚本，请点击应用' })
+      const status = await lxSourceApi.importScriptFolder(nextPath)
+      applyLxSourceStatus(status)
+      addToast({ type: status.scriptLoaded ? 'success' : 'info', message: status.scriptLoaded ? '已识别并导入文件夹中的音源' : status.lastError || '已导入音源，但当前音源尚未加载成功' })
     } catch (error) {
       console.error('Pick LX source script failed:', error)
       addToast({ type: 'error', message: '选择音源脚本失败' })
     } finally {
       setIsPickingLxSourcePath(false)
+    }
+  }
+
+  const handleTestLxSources = async () => {
+    if (!lxSourceStatus?.managedSources.length) return
+    setIsTestingLxSources(true)
+    try {
+      let successCount = 0
+      let latestStatus = lxSourceStatus
+      for (const source of lxSourceStatus.managedSources) {
+        if (!source.exists) continue
+        const status = await lxSourceApi.testSource(source.id)
+        latestStatus = status
+        if (status.scriptLoaded && !status.lastError) successCount += 1
+      }
+      applyLxSourceStatus(latestStatus)
+      addToast({ type: successCount > 0 ? 'success' : 'error', message: `检测完成：${successCount}/${lxSourceStatus.managedSources.length} 个音源可加载` })
+    } catch (error) {
+      console.error('Test LX sources failed:', error)
+      addToast({ type: 'error', message: error instanceof Error ? error.message : '音源检测失败' })
+    } finally {
+      setIsTestingLxSources(false)
     }
   }
 
@@ -1812,7 +1838,15 @@ export default function Settings() {
               className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
             >
               {isPickingLxSourcePath ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />}
-              选择脚本
+              选择文件夹并导入
+            </button>
+            <button
+              onClick={() => void handleTestLxSources()}
+              disabled={isTestingLxSources || !lxSourceStatus?.available || managedLxSources.length === 0}
+              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
+            >
+              {isTestingLxSources ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              一键检测
             </button>
             <button
               onClick={() => void handleResetLxSourceScript()}
@@ -1895,7 +1929,7 @@ export default function Settings() {
                 <div>
                   <p className="font-medium">导入音源</p>
                   <p className="text-xs text-[var(--text-muted)] mt-1">
-                    先导入本地脚本或 URL 音源，再在下方已导入列表里切换当前生效音源。
+                    选择本地文件夹会自动扫描其中的 LX 音源脚本并导入，也可以通过 URL 导入单个音源。
                   </p>
                 </div>
 
@@ -1925,13 +1959,13 @@ export default function Settings() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">导入本地脚本</label>
+                    <label className="text-sm font-medium">导入本地文件夹</label>
                     <div className="flex flex-col gap-2">
                       <input
                         type="text"
                         value={lxScriptPathInput}
                         onChange={(event) => setLxScriptPathInput(event.target.value)}
-                        placeholder="输入 LX JS 音源文件路径，例如 ./sources/example-source.js"
+                        placeholder="输入或选择包含 LX 音源 JS 的文件夹路径"
                         className="input flex-1 font-mono text-xs"
                       />
                       <button
@@ -1943,7 +1977,7 @@ export default function Settings() {
                       </button>
                     </div>
                     <p className="text-xs text-[var(--text-muted)]">
-                      支持手动输入路径或点击“选择脚本”；导入后会保留在音源列表中，可随时切换。
+                      支持手动输入文件夹路径或点击上方“选择文件夹并导入”；导入后可一键检测可用性。
                     </p>
                   </div>
                 </div>

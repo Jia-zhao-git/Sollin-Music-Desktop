@@ -198,6 +198,35 @@ const getManagedSourceByUrl = (scriptUrl: string) => {
   return managedSources.find((source) => source.url === scriptUrl) || null
 }
 
+const isLikelyLxSourceScript = (filePath: string) => {
+  try {
+    if (!/\.(?:js|mjs|cjs)$/i.test(filePath)) return false
+    const stat = fs.statSync(filePath)
+    if (!stat.isFile() || stat.size <= 0 || stat.size > 9_000_000) return false
+    const script = fs.readFileSync(filePath, 'utf8')
+    return /@name\s+/.test(script) && /musicUrl|source\s*=|sources\s*:|qualitys|quality/.test(script)
+  } catch {
+    return false
+  }
+}
+
+const findLxSourceScriptsInFolder = (folderPath: string) => {
+  const results: string[] = []
+  const walk = (directoryPath: string, depth: number) => {
+    if (depth > 3 || results.length >= 80) return
+    for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true })) {
+      const fullPath = path.join(directoryPath, entry.name)
+      if (entry.isDirectory()) {
+        if (!['node_modules', '.git', 'dist', 'build'].includes(entry.name)) walk(fullPath, depth + 1)
+      } else if (isLikelyLxSourceScript(fullPath)) {
+        results.push(fullPath)
+      }
+    }
+  }
+  walk(folderPath, 0)
+  return results
+}
+
 const setManagedSources = (sources: ManagedLxSourceConfig[]) => {
   managedSources = [...sources].sort((left, right) => right.importedAt - left.importedAt)
 }
@@ -1012,10 +1041,9 @@ const handleHttpRequest = async(options: HttpBridgeRequestOptions) => {
 
 const handlePickScriptPath = async(browserWindow?: BrowserWindow | null) => {
   const options: Electron.OpenDialogOptions = {
-    title: '选择 LX 音源脚本',
-    properties: ['openFile'],
+    title: '选择 LX 音源文件夹',
+    properties: ['openDirectory', 'createDirectory'],
     filters: [
-      { name: 'JavaScript', extensions: ['js', 'mjs', 'cjs'] },
       { name: 'All Files', extensions: ['*'] },
     ],
   }
@@ -1026,6 +1054,38 @@ const handlePickScriptPath = async(browserWindow?: BrowserWindow | null) => {
 
   if (result.canceled || !result.filePaths.length) return null
   return result.filePaths[0]
+}
+
+const handleImportScriptFolder = async(folderPath: string) => {
+  const targetPath = typeof folderPath === 'string' ? folderPath.trim() : ''
+  if (!targetPath || !fs.existsSync(targetPath) || !fs.statSync(targetPath).isDirectory()) {
+    throw new Error('请选择有效的音源文件夹')
+  }
+
+  const scriptPaths = findLxSourceScriptsInFolder(targetPath)
+  if (!scriptPaths.length) throw new Error('文件夹中未识别到 LX 音源脚本')
+
+  const nextSources: ManagedLxSourceConfig[] = []
+  for (const scriptPath of scriptPaths) {
+    const scriptInfo = getStoredScriptInfo(scriptPath)
+    const existingSource = getManagedSourceByPath(scriptPath)
+    nextSources.push({
+      id: existingSource?.id || createManagedSourceId(),
+      type: 'local',
+      path: scriptPath,
+      url: null,
+      importedAt: existingSource?.importedAt || Date.now(),
+      allowShowUpdateAlert: existingSource?.allowShowUpdateAlert ?? true,
+      scriptInfo,
+    })
+  }
+
+  setManagedSources([
+    ...nextSources,
+    ...managedSources.filter((source) => !nextSources.some((next) => next.path === source.path)),
+  ])
+  activeSourceId = nextSources[0].id
+  return reloadActiveSourceRuntime()
 }
 
 const isRuntimeSender = (sender: Electron.WebContents) => {
@@ -1100,6 +1160,25 @@ export const setupLxSourceIpcHandlers = () => {
 
   ipcMain.handle(LX_SOURCE_PUBLIC_IPC.setScriptPath, (_event, nextPath: string) => {
     return runInRuntimeQueue(() => handleSetScriptPath(nextPath))
+  })
+
+  ipcMain.handle(LX_SOURCE_PUBLIC_IPC.importScriptFolder, (_event, folderPath: string) => {
+    return runInRuntimeQueue(() => handleImportScriptFolder(folderPath))
+  })
+
+  ipcMain.handle(LX_SOURCE_PUBLIC_IPC.testSource, (_event, sourceId?: string | null) => {
+    return runInRuntimeQueue(async() => {
+      if (!sourceId) return getStatusSnapshot()
+      const source = getManagedSourceById(sourceId)
+      if (!source) throw new Error('未找到目标音源')
+      const previousActive = activeSourceId
+      try {
+        activeSourceId = sourceId
+        return await reloadActiveSourceRuntime()
+      } finally {
+        activeSourceId = previousActive
+      }
+    })
   })
 
   ipcMain.handle(LX_SOURCE_PUBLIC_IPC.pickScriptPath, (event) => {

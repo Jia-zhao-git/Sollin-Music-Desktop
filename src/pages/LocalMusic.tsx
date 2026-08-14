@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Disc,
@@ -220,6 +222,7 @@ const formatCollectionDuration = (totalSeconds: number) => {
 const buildLocalPlaylistId = (prefix: string, id: string) => `local-${prefix}-${encodeURIComponent(id)}`
 
 export default function LocalMusic() {
+  const navigate = useNavigate()
   const {
     folders,
     songs,
@@ -434,6 +437,13 @@ export default function LocalMusic() {
       <section className="rounded-3xl border border-white/20 bg-white/45 p-5 backdrop-blur-xl dark:border-gray-700/40 dark:bg-gray-800/40">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
+            <button
+              onClick={() => navigate('/')}
+              className="inline-flex items-center gap-2 rounded-full border border-black/5 bg-white/60 px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-white hover:text-[var(--text-secondary)] dark:border-white/10 dark:bg-gray-800/60 dark:hover:bg-gray-800"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              返回在线首页
+            </button>
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-bold tracking-tight">本地音乐</h1>
               <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-medium text-[var(--text-secondary)] dark:bg-white/10 dark:text-[var(--text-secondary)]">

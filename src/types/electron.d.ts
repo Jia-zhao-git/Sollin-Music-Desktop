@@ -188,6 +188,8 @@ declare global {
       decodeKrcLyric: (data: string) => Promise<string>
       getLxSourceStatus: () => Promise<any>
       setLxSourceScriptPath: (path: string) => Promise<any>
+      importLxSourceScriptFolder: (path: string) => Promise<any>
+      testLxSource: (sourceId?: string | null) => Promise<any>
       pickLxSourceScriptPath: () => Promise<string | null>
       importLxSourceScriptUrl: (url: string) => Promise<any>
       exportLxSourceBackupState: () => Promise<any>

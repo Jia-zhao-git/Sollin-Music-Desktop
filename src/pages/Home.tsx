@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Play, RefreshCw, ChevronRight } from 'lucide-react'
+import { HardDrive, Play, RefreshCw, ChevronRight } from 'lucide-react'
 import api from '@/services/api'
 import { usePlayerStore } from '@/stores/playerStore'
 import { useUIStore } from '@/stores/uiStore'
@@ -263,6 +263,23 @@ export default function Home() {
 
   return (
     <div className="pb-6">
+      <section className="mb-6 overflow-hidden rounded-2xl border border-black/5 bg-gradient-to-r from-primary-500/10 via-fuchsia-500/10 to-amber-500/10 p-4 dark:border-white/10">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">本地音乐</p>
+            <h2 className="mt-1 text-lg font-bold text-[var(--text-primary)]">管理电脑里的歌曲</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">添加目录、扫描本地音乐，和在线推荐分开管理。</p>
+          </div>
+          <button
+            onClick={() => navigate('/local')}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-primary-600 hover:shadow-lg"
+          >
+            <HardDrive className="h-4 w-4" />
+            进入本地音乐
+          </button>
+        </div>
+      </section>
+
       {/* Platform tabs */}
       <div className="flex items-center gap-2 mb-6">
         {ONLINE_MUSIC_PLATFORMS.map((platform) => (

@@ -204,6 +204,18 @@ class LxSourceService {
     return electronApi.pickLxSourceScriptPath()
   }
 
+  async importScriptFolder(path: string): Promise<LxSourceStatus> {
+    const electronApi = this.getElectronApi()
+    if (!electronApi?.importLxSourceScriptFolder) throw new Error('LX_SOURCE_UNAVAILABLE')
+    return this.normalizeStatus(await electronApi.importLxSourceScriptFolder(path))
+  }
+
+  async testSource(sourceId?: string | null): Promise<LxSourceStatus> {
+    const electronApi = this.getElectronApi()
+    if (!electronApi?.testLxSource) throw new Error('LX_SOURCE_UNAVAILABLE')
+    return this.normalizeStatus(await electronApi.testLxSource(sourceId ?? null))
+  }
+
   async importScriptUrl(url: string): Promise<LxSourceStatus> {
     const electronApi = this.getElectronApi()
     if (!electronApi?.importLxSourceScriptUrl) throw new Error('LX_SOURCE_UNAVAILABLE')

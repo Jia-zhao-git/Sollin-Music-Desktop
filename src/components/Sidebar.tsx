@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   Home,
-  HardDrive,
   ListMusic,
+  Film,
+  BookOpen,
   Plus,
   ChevronLeft,
   ChevronRight,
@@ -232,8 +233,9 @@ export default function Sidebar() {
   ]
 
   const mainNavItems = [
-    { icon: Home, label: '主页', path: '/' },
-    { icon: HardDrive, label: '本地音乐', path: '/library' },
+    { icon: Home, label: '音乐库', path: '/' },
+    { icon: Film, label: '影视库', path: '/video' },
+    { icon: BookOpen, label: '小说库', path: '/novel' },
   ]
 
   const createdNeteasePlaylists = userPlaylists.userId === neteaseUserData?.userId
