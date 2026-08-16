@@ -1,0 +1,483 @@
+
+// ============================================================
+//  宿主适配层（Sollin 桥接）
+//  说明：本文件追加在 verbatim 提取段之后。同作用域内后置的函数声明
+//  在提升阶段覆盖前面的同名声明，因此这里的重定义对全文件生效。
+// ============================================================
+
+// ---------- 提示 / 事件桥 ----------
+function showToast(msg) { if (host.toast) host.toast(String(msg == null ? '' : msg)); }
+function emitFxChange() { if (host.onFxChange && !__disposed) host.onFxChange(); }
+
+// ---------- React 面板通过 onFxChange 订阅状态，DOM 控件同步全部改为事件 ----------
+function buildLyricColorControls() { emitFxChange(); }
+function updateLyricColorControls() { emitFxChange(); }
+function updateLyricHighlightControls() { emitFxChange(); }
+function updateLyricGlowControls() { emitFxChange(); }
+function updateHomeAccentControls() { emitFxChange(); }
+function updateIconAccentControls() { emitFxChange(); }
+function updateCustomBackgroundControls() { emitFxChange(); }
+function updateUiAccentControls() { emitFxChange(); }
+function updateVisualTintControls() { emitFxChange(); }
+function updateLyricFontControls() { emitFxChange(); }
+function buildPresetGrid() { emitFxChange(); }
+function refreshPresetGrid() { emitFxChange(); }
+function renderUserFxArchives() { emitFxChange(); }
+function updateDesktopLyricsFpsControls() { emitFxChange(); }
+function updatePerformanceControls() { emitFxChange(); }
+function updateFxInputs() { emitFxChange(); }
+function setRange() {}
+function applyBackgroundMediaHint() {}
+function bindUserFxArchiveDrop() {}
+function updateDevelopmentFxControls() {}
+function animateFxResetButton() {}
+function ensureFxSliderResetButton() {}
+
+// ---------- 封面取色弹层由 React 实现，原生弹层桩掉 ----------
+function openCoverColorPicker() {}
+function closeCoverColorPicker() {}
+function moveCoverColorLoupe() {}
+function hideCoverColorLoupe() {}
+function pickCoverColorFromArt() {}
+function renderCoverPickerSwatches() {}
+function setCoverPickerPreview() {}
+function bindColorLabPicker() {}
+function bindColorLabRows() {}
+function closeColorLab() {}
+
+// ---------- 桌面歌词 / 壁纸窗口（Sollin 自有桌面歌词，未移植） ----------
+function pushDesktopLyricsState() {}
+function pushWallpaperState() {}
+function notifyDesktopLyricsBeatMapReady() {}
+function getDesktopWindowApi() { return null; }
+function applyDesktopLyricsState() {}
+function applyWallpaperModeState() {}
+function syncDesktopOverlayState() {}
+function updateDesktopLyricsVisibility() {}
+
+// ---------- 未移植的宿主子系统（歌单架 / Home / 模态 / 待机引导 / 手势摄像头） ----------
+function updateHomeAudioVisual() {}
+function ensureHomeWaveTrackBars() {}
+function openGsapModal() {}
+function closeGsapModal() {}
+function closeMiniQueue() { miniQueueOpen = false; }
+function setCamMode() {}
+function setShelfMode() {}
+function setShelfCameraMode() {}
+function setShelfPresence() {}
+function setShelfAccentColor() {}
+function shelfAccentHex() { return fx.shelfAccentColor || '#ffffff'; }
+function refreshShelfVisuals() {}
+function updateShelfControlUi() {}
+function safeShelfCloseContent() {}
+function shouldDimWallpaperForShelf() { return false; }
+function setPeek() {}
+function toggleFxPanel() {}
+function togglePlaylistPanel() {}
+function idleGuidePointerDown() {}
+function idleGuidePointerMove() {}
+function idleGuidePointerUp() {}
+function idleGuidePointerLeave() {}
+function idleGuideWheel() {}
+function setCustomCoverForCurrent() {}
+function startGestureControl() {}
+function stopGestureControl() {}
+function setImmersiveMode(on) {
+  immersiveMode = !!on;
+  if (host.onImmersiveChange) host.onImmersiveChange(immersiveMode);
+}
+function toggleImmersiveMode() { setImmersiveMode(!immersiveMode); }
+function updateImmersiveButton() {}
+function closeImmersiveInterference() {}
+function syncControlsAutoHideButton() {}
+function setParticleLyricsSilently(on) {
+  fx.particleLyrics = !!on;
+  if (fx.particleLyrics) createLyricsParticles();
+  else clearStageLyrics();
+  lyricsVisible = fx.particleLyrics;
+}
+
+// ---------- 曲目信息 / 控制条封面由 React 渲染 ----------
+function updateControlTrackInfo() {}
+function setControlCoverSrc() {}
+
+// ---------- Mineradio 本地服务端 API 不存在：磁盘节拍缓存与音源代理降级 ----------
+function apiJson() { return Promise.reject(new Error('mineradio host api unavailable')); }
+async function fetchBeatPrefetchAudioUrl() { return null; }
+
+// ---------- music-tempo 由 npm 模块提供 ----------
+function ensureMusicTempo() {
+  if (!window.MusicTempo) { try { window.MusicTempo = MUSIC_TEMPO_MODULE; } catch (e) {} }
+  return Promise.resolve(window.MusicTempo || MUSIC_TEMPO_MODULE || null);
+}
+
+// ---------- 音频分析（captureStream 旁路，不重路由宿主音频输出） ----------
+var __audioStream = null;
+function initAudio() {
+  if (audioReady || !audio) return;
+  try {
+    var cap = audio.captureStream || audio.mozCaptureStream;
+    if (typeof cap !== 'function') return;
+    var stream = cap.call(audio);
+    if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length) return;
+    __audioStream = stream;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    source = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    beatAnalyser = audioCtx.createAnalyser();
+    analyser.fftSize = FFT_SIZE;
+    analyser.smoothingTimeConstant = 0.58;
+    beatAnalyser.fftSize = BEAT_FFT_SIZE;
+    beatAnalyser.smoothingTimeConstant = 0.10;
+    source.connect(analyser);
+    source.connect(beatAnalyser);
+    frequencyData.fill(0);
+    beatFrequencyData.fill(0);
+    beatTimeDomainData.fill(128);
+    resetRealtimeBeatEngine();
+    audioReady = true;
+  } catch (e) {
+    console.warn('[mineradio] init audio analysis failed:', e);
+  }
+}
+function teardownAudioAnalysis() {
+  try { if (source) source.disconnect(); } catch (e) {}
+  try { if (analyser) analyser.disconnect(); } catch (e) {}
+  try { if (beatAnalyser) beatAnalyser.disconnect(); } catch (e) {}
+  try { if (audioCtx) audioCtx.close(); } catch (e) {}
+  source = null; analyser = null; beatAnalyser = null; audioCtx = null;
+  __audioStream = null;
+  audioReady = false;
+}
+function ensureAudioAnalysis() {
+  if (!audio) return;
+  var streamAlive = __audioStream && __audioStream.active
+    && __audioStream.getAudioTracks().some(function(t){ return t.readyState === 'live' && t.enabled; });
+  if (audioReady && streamAlive) { resumeAudioAnalysis(); return; }
+  teardownAudioAnalysis();
+  initAudio();
+  resumeAudioAnalysis();
+}
+function resumeAudioAnalysis() {
+  if (audioCtx && audioCtx.state === 'suspended') return audioCtx.resume().catch(function(e){ console.warn('audio context resume failed:', e); });
+  return Promise.resolve();
+}
+
+// ---------- 节拍角标（React 呈现） ----------
+function showBeatChip(text) {
+  if (host.onBeatChip && !__disposed) host.onBeatChip({ visible: true, text: String(text || '') });
+}
+function hideBeatChip() {
+  if (host.onBeatChip && !__disposed) host.onBeatChip({ visible: false, text: '' });
+}
+
+// ---------- 进度条拖拽粒子（DOM 微粒，附着 body） ----------
+var progressDragState = { lastParticleAt: 0 };
+function emitProgressDragParticles(x, y) {
+  var now = performance.now();
+  if (now - progressDragState.lastParticleAt < 46) return;
+  progressDragState.lastParticleAt = now;
+  for (var i = 0; i < 3; i++) {
+    var dot = document.createElement('span');
+    dot.className = 'progress-drag-particle';
+    var dx = (Math.random() - 0.5) * 34;
+    var dy = -10 - Math.random() * 28;
+    dot.style.setProperty('--px', x + 'px');
+    dot.style.setProperty('--py', y + 'px');
+    dot.style.setProperty('--dx', dx + 'px');
+    dot.style.setProperty('--dy', dy + 'px');
+    (host.overlayRoot || document.body).appendChild(dot);
+    setTimeout((function(el){ return function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }; })(dot), 700);
+  }
+}
+
+// ============================================================
+//  对外 API
+// ============================================================
+// 空场星河预览：无歌曲时切到自发光的“星河”预设，避免封面粒子无封面而全黑；
+// 正式播放时还原用户选择的播放预设（对应原 applyStartupStarfieldPreset /
+// switchPlaybackVisualToEmily）。
+function applyStartupStarfieldVisual() {
+  if (playing || currentIdx >= 0) return;
+  startupVisualPreviewActive = true;
+  if (fx.preset !== 5) {
+    setPreset(5, { silent: true, preserveCamera: false, skipTransition: true, noSave: true });
+  } else {
+    syncFxUniforms();
+  }
+}
+function restorePlaybackVisualPreset() {
+  var targetPreset = typeof playbackVisualPreset === 'number' ? playbackVisualPreset : fxDefaults.preset;
+  startupVisualPreviewActive = false;
+  if (fx.preset !== targetPreset) {
+    setPreset(targetPreset, { silent: true, preserveCamera: false, noSave: true });
+  } else {
+    syncFxUniforms();
+  }
+}
+
+function apiSetTrack(song) {
+  if (__disposed) return;
+  song = song || null;
+  trackSwitchToken++;
+  beatMapToken++;
+  djBeatMapToken++;
+  cancelBeatAnalysisTimer();
+  cancelBeatPrefetchTimer();
+  cancelDjBeatAnalysisTimer();
+  hideBeatChip();
+  currentBeatMap = null;
+  beatMapNextIdx = 0;
+  resetDjBeatMapState();
+  setDjModeActive(false, null);
+  playQueue = song ? [song] : [];
+  currentIdx = song ? 0 : -1;
+  currentLocalSong = null;
+  lyricsLines = [];
+  lyricsHasNativeKaraoke = false;
+  lyricsTimingSource = 'none';
+  try { clearStageLyrics(); } catch (e) {}
+  resetCinemaTrackProfile(song);
+  resetAudioVisualState();
+  syncBeatCameraToTime(audio && isFinite(audio.currentTime) ? audio.currentTime : 0);
+  if (song) {
+    if (startupVisualPreviewActive) restorePlaybackVisualPreset();
+    var coverUrl = songCoverSrc(song, 400) || song.cover || '';
+    loadCoverFromUrl(coverUrl);
+    var beatKey = beatMapSongKey(song);
+    var beatUrl = (audio && (audio.currentSrc || audio.src)) || song.url || '';
+    if (beatKey && beatUrl) {
+      if (beatMapCache[beatKey]) {
+        currentBeatMap = beatMapCache[beatKey];
+        beatMapNextIdx = 0;
+        alignBeatCameraCursorToTime(audio && isFinite(audio.currentTime) ? audio.currentTime : 0);
+        applyCinemaProfileFromBeatMap(currentBeatMap);
+      } else {
+        scheduleBeatAnalysis(beatKey, beatUrl, beatMapToken, song);
+      }
+    }
+  } else {
+    loadCoverFromUrl('');
+    applyStartupStarfieldVisual();
+  }
+}
+
+function apiSetLyrics(lines, meta) {
+  if (__disposed) return;
+  meta = meta || {};
+  lyricsLines = Array.isArray(lines) ? lines : [];
+  lyricsHasNativeKaraoke = !!meta.hasKaraoke;
+  lyricsTimingSource = meta.timingSource || (lyricsLines.length ? 'line' : 'none');
+  lyricsVisible = !!fx.particleLyrics;
+  try { clearStageLyrics(); } catch (e) {}
+}
+
+function apiSetPlaying(isPlaying) {
+  if (__disposed) return;
+  playing = !!isPlaying;
+  if (playing) ensureAudioAnalysis();
+}
+
+function apiNotifySeek() {
+  if (__disposed) return;
+  syncBeatCameraToTime(audio && isFinite(audio.currentTime) ? audio.currentTime : 0);
+}
+
+function apiSetAudioElement(el) {
+  if (__disposed) return;
+  if (audio === el) return;
+  teardownAudioAnalysis();
+  audio = el || null;
+  if (audio && playing) ensureAudioAnalysis();
+}
+
+// bindFxPanel 中滑块 input 的副作用复刻（React 面板调用）
+function apiSetFxValue(key, value) {
+  if (__disposed) return;
+  var num = typeof value === 'number' ? value : parseFloat(value);
+  fx[key] = isFinite(num) ? num : value;
+  if (key === 'coverResolution') {
+    fx.coverResolution = normalizeCoverResolution(fx.coverResolution);
+    applyCoverParticleResolution(fx.coverResolution, { reload: true });
+  }
+  if (key === 'lyricWeight') fx.lyricWeight = Math.round(clampRange(fx.lyricWeight, 500, 900) / 50) * 50;
+  if (key === 'backgroundOpacity') {
+    fx.backgroundOpacity = clampRange(fx.backgroundOpacity, 0, 1);
+    fx.backgroundColorMode = 'custom';
+    fx.backgroundColorCustom = true;
+    applyCustomBackground();
+  }
+  if (key === 'controlGlassChromaticOffset') {
+    fx.controlGlassChromaticOffset = normalizeControlGlassChromaticOffset(fx.controlGlassChromaticOffset);
+    applyControlGlassChromaticOffset();
+  }
+  if (key === 'desktopLyricsSize') fx.desktopLyricsSize = clampRange(fx.desktopLyricsSize, 0.72, 1.55);
+  if (key === 'desktopLyricsOpacity') fx.desktopLyricsOpacity = clampRange(fx.desktopLyricsOpacity, 0.28, 1);
+  if (key === 'desktopLyricsY') fx.desktopLyricsY = clampRange(fx.desktopLyricsY, 0.08, 0.92);
+  if (key === 'lyricTiltX' || key === 'lyricTiltY') fx[key] = Math.round(clampRange(fx[key], -42, 42));
+  syncFxUniforms();
+  if (key === 'lyricLetterSpacing' || key === 'lyricLineHeight' || key === 'lyricWeight') refreshCurrentLyricStyle();
+  saveLyricLayout();
+  emitFxChange();
+}
+
+function apiGetState() {
+  return {
+    fx: fx,
+    presetMeta: presetMeta,
+    presetIcons: presetIcons,
+    presetDisplayOrder: presetDisplayOrder,
+    lyricColorPresets: lyricColorPresets,
+    userFxArchives: userFxArchives,
+    coverSwatches: (function(){ try { return coverPickerSwatchColors(); } catch (e) { return []; } })(),
+    immersive: immersiveMode,
+  };
+}
+
+function apiDestroy() {
+  if (__disposed) return;
+  __disposed = true;
+  try { flushPersistentVisualState(); } catch (e) {}
+  beatMapToken++; djBeatMapToken++; trackSwitchToken++;
+  cancelBeatAnalysisTimer();
+  cancelBeatPrefetchTimer();
+  cancelDjBeatAnalysisTimer();
+  __timers.forEach(function(id){ clearInterval(id); });
+  __listeners.forEach(function(entry){
+    try { entry[0].removeEventListener(entry[1], entry[2], entry[3]); } catch (e) {}
+  });
+  __listeners.length = 0;
+  try {
+    gsap.globalTimeline.getChildren(true, true, true).forEach(function(t){ try { t.kill(); } catch (e) {} });
+  } catch (e) {}
+  try {
+    scene.traverse(function(obj){
+      try { if (obj.geometry && obj.geometry.dispose) obj.geometry.dispose(); } catch (e) {}
+      var m = obj.material;
+      if (m) (Array.isArray(m) ? m : [m]).forEach(function(mm){
+        if (!mm) return;
+        try {
+          Object.keys(mm).forEach(function(k){
+            var v = mm[k];
+            if (v && v.isTexture) { try { v.dispose(); } catch (e) {} }
+          });
+          if (mm.uniforms) Object.keys(mm.uniforms).forEach(function(k){
+            var u = mm.uniforms[k];
+            if (u && u.value && u.value.isTexture) { try { u.value.dispose(); } catch (e) {} }
+          });
+        } catch (e) {}
+        try { mm.dispose(); } catch (e) {}
+      });
+    });
+  } catch (e) {}
+  teardownAudioAnalysis();
+  try { renderer.dispose(); } catch (e) {}
+  try { renderer.forceContextLoss && renderer.forceContextLoss(); } catch (e) {}
+  try { if (renderer.domElement && renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement); } catch (e) {}
+  document.body.classList.remove('render-deep-sleep', 'render-background-eco', 'cursor-hidden');
+}
+
+// ============================================================
+//  启动（对应原“启动”段的视觉子集）
+// ============================================================
+applySavedLyricPaletteState();
+initControlGlassSurface();
+bindPlayerControlAnimations();
+scheduleUiWarmTask(function(){
+  if (__disposed) return;
+  updateControlGlassDisplacementMap();
+  try { if (renderer && renderer.compile && scene && camera) renderer.compile(scene, camera); } catch (e) {}
+}, 900);
+if (fx.floatLayer) createFloatLayer();
+if (fx.particleLyrics) createLyricsParticles();
+if (fx.backCover) createBackCoverLayer();
+installRenderPowerHooks();
+applyCustomBackground();
+applyUiAccentColor();
+applyIconAccentColors();
+syncFxUniforms();
+applyStartupStarfieldVisual();
+__on(window, 'resize', function(){ if (!__disposed) scheduleMainRendererViewportRefresh('resize'); });
+scheduleMainRendererViewportRefresh('mount');
+
+function apiDebug() {
+  var dbg = { disposed: __disposed, fxPreset: fx.preset, playing: playing, audioReady: audioReady, currentIdx: currentIdx };
+  try { dbg.hasCover = uniforms.uHasCover.value; } catch (e) { dbg.hasCover = 'ERR:' + e.message; }
+  try { dbg.uPreset = uniforms.uPreset.value; } catch (e) {}
+  try { dbg.uBass = Number(uniforms.uBass.value).toFixed(3); dbg.uEnergy = Number(uniforms.uEnergy.value).toFixed(3); } catch (e) {}
+  try { dbg.particlesVisible = particles.visible; dbg.particleCount = particles.geometry.attributes.position.count; } catch (e) { dbg.particlesVisible = 'ERR:' + e.message; }
+  try { dbg.particleMaterialVisible = particles.material.visible; dbg.opacityU = particles.material.uniforms ? 'shader' : 'basic'; } catch (e) {}
+  try { dbg.coverTexSet = typeof coverTex !== 'undefined' && !!coverTex; } catch (e) {}
+  try { dbg.lyricsLines = lyricsLines.length; dbg.lyricsVisible = lyricsVisible; } catch (e) {}
+  try { dbg.stageKeys = stageLyrics ? Object.keys(stageLyrics).slice(0, 30).join(',') : 'none'; } catch (e) {}
+  try { dbg.stageCurrentText = stageLyrics && stageLyrics.current ? (stageLyrics.current.userData && stageLyrics.current.userData.text) : null; } catch (e) {}
+  try { dbg.sceneChildren = scene.children.map(function(c){ return (c.type || '?') + ':' + (c.name || '') + ':' + (c.visible ? 'v' : 'h'); }).join(' | '); } catch (e) {}
+  try { dbg.fps = renderPerfState.fps; dbg.frames = renderPerfState.frames; dbg.mode = renderPerfState.mode; } catch (e) {}
+  try { dbg.cameraZ = Number(camera.position.z).toFixed(2); dbg.cameraFov = camera.fov; } catch (e) {}
+  try { dbg.audioSrcSet = !!(audio && (audio.currentSrc || audio.src)); dbg.audioPaused = audio ? audio.paused : null; dbg.audioTime = audio ? Number(audio.currentTime).toFixed(2) : null; } catch (e) {}
+  try { dbg.analyserSet = !!analyser; } catch (e) {}
+  try { dbg.deepSleep = isDeepBackgroundMode(); } catch (e) {}
+  return dbg;
+}
+try { window.__mineradioDebug = apiDebug; } catch (e) {}
+
+return {
+  setTrack: apiSetTrack,
+  setLyrics: apiSetLyrics,
+  setPlaying: apiSetPlaying,
+  notifySeek: apiNotifySeek,
+  setAudioElement: apiSetAudioElement,
+  getState: apiGetState,
+  setFxValue: apiSetFxValue,
+  toggleFx: function(key){ if (!__disposed) { toggleFx(key); emitFxChange(); } },
+  setPreset: function(p){ if (!__disposed) { setPreset(p); emitFxChange(); } },
+  resetFx: function(){ if (!__disposed) { resetFx(); emitFxChange(); } },
+  setLyricFont: function(k){ if (!__disposed) { setLyricFont(k); emitFxChange(); } },
+  setLyricColorAuto: function(){ if (!__disposed) { setLyricColorAuto(); emitFxChange(); } },
+  setLyricColorCustom: function(c){ if (!__disposed) { setLyricColorCustom(c, true); emitFxChange(); } },
+  setLyricColorPreset: function(i){ if (!__disposed) { setLyricColorPreset(i); emitFxChange(); } },
+  setLyricHighlightAuto: function(){ if (!__disposed) { setLyricHighlightAuto(); emitFxChange(); } },
+  setLyricHighlightCustom: function(c){ if (!__disposed) { setLyricHighlightCustom(c, true); emitFxChange(); } },
+  setLyricGlowLinked: function(on){ if (!__disposed) { setLyricGlowLinked(on); emitFxChange(); } },
+  setLyricGlowCustom: function(c){ if (!__disposed) { setLyricGlowCustom(c, true); emitFxChange(); } },
+  setUiAccentColor: function(c){ if (!__disposed) { setUiAccentColor(c, true); emitFxChange(); } },
+  resetUiAccentColor: function(){ if (!__disposed) { resetUiAccentColor(); emitFxChange(); } },
+  setVisualTintAuto: function(){ if (!__disposed) { setVisualTintAuto(); emitFxChange(); } },
+  setVisualTintCustom: function(c){ if (!__disposed) { setVisualTintCustom(c, true); emitFxChange(); } },
+  resetVisualTintColor: function(){ if (!__disposed) { resetVisualTintColor(); emitFxChange(); } },
+  setCustomBackgroundColor: function(c){ if (!__disposed) { setCustomBackgroundColor(c, true); emitFxChange(); } },
+  setCustomBackgroundCoverMode: function(){ if (!__disposed) { setCustomBackgroundCoverMode(); emitFxChange(); } },
+  setCustomBackgroundOpacity: function(v){ if (!__disposed) { setCustomBackgroundOpacity(v, true); emitFxChange(); } },
+  clearCustomBackgroundImage: function(){ if (!__disposed) { clearCustomBackgroundImage(); emitFxChange(); } },
+  readBackgroundMediaFile: function(file){ if (!__disposed) readBackgroundMediaFile(file); },
+  setPerformanceBackgroundMode: function(m){ if (!__disposed) { setPerformanceBackgroundMode(m); emitFxChange(); } },
+  setPerformanceQualityMode: function(m){ if (!__disposed) { setPerformanceQualityMode(m); emitFxChange(); } },
+  applyUserFxArchive: function(i){ if (!__disposed) { applyUserFxArchive(i); emitFxChange(); } },
+  saveUserFxArchive: function(i){ if (!__disposed) { saveUserFxArchive(i); emitFxChange(); } },
+  createUserFxArchive: function(){ if (!__disposed) { createUserFxArchive(); emitFxChange(); } },
+  removeUserFxArchive: function(i){ if (!__disposed) { removeUserFxArchive(i); emitFxChange(); } },
+  renameUserFxArchive: function(i, name){
+    if (__disposed) return;
+    var slot = userFxArchiveAt(i);
+    if (!slot) return;
+    slot.name = normalizeUserFxArchiveName(name, i);
+    saveUserFxArchives();
+    emitFxChange();
+  },
+  exportUserFxArchive: function(i){ if (!__disposed) exportUserFxArchive(i); },
+  importUserFxArchiveText: function(text, fileName){ if (!__disposed) { importUserFxArchiveText(text, fileName); emitFxChange(); } },
+  setImmersive: function(on){ if (!__disposed) setImmersiveMode(!!on); },
+  toggleLyrics: function(){
+    if (__disposed) return;
+    setParticleLyricsSilently(!fx.particleLyrics);
+    showToast(fx.particleLyrics ? '歌词已开启' : '歌词已关闭');
+    saveLyricLayout();
+    emitFxChange();
+  },
+  recenterCamera: function(){ if (!__disposed) recenterCamera(); },
+  emitProgressDragParticles: emitProgressDragParticles,
+  markRenderInteraction: function(reason){ if (!__disposed) markRenderInteraction(reason || 'host'); },
+  syncViewport: function(){ if (!__disposed) scheduleMainRendererViewportRefresh('host'); },
+  destroy: apiDestroy,
+};
+}

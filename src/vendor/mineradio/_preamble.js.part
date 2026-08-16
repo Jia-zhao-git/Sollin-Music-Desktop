@@ -1,0 +1,503 @@
+/*!
+ * Mineradio 播放界面视觉引擎（移植版）
+ *
+ * 代码提取自 Mineradio 项目 public/index.html（GPL-3.0）：
+ *   https://github.com/XxHuberrr/Mineradio
+ * 以工厂函数形式封装，宿主（Sollin）通过 host 适配器提供 DOM 挂载点、
+ * 音频元素、歌曲/歌词数据与 UI 回调。视觉子系统（封面粒子、舞台歌词、
+ * 电影镜头、涟漪、浮空粒子、骷髅预设、离线节拍解析）保持原实现。
+ *
+ * 本文件按 GPL-3.0 授权分发。
+ */
+import * as THREE from 'three'
+import { gsap } from 'gsap'
+import MusicTempo from 'music-tempo'
+
+const MUSIC_TEMPO_MODULE = MusicTempo
+
+// vendored 代码里大量以 window.gsap / window.MusicTempo / window.THREE 引用全局，
+// 这里把模块实例挂到 window（不覆盖宿主已有值）。
+if (typeof window !== 'undefined') {
+  if (!window.gsap) window.gsap = gsap
+  if (!window.THREE) window.THREE = THREE
+  if (!window.MusicTempo) window.MusicTempo = MusicTempo
+}
+
+/**
+ * @param {{
+ *   canvasContainer: HTMLElement,
+ *   albumBg: HTMLElement,
+ *   overlayRoot: HTMLElement,
+ *   audio: HTMLAudioElement | null,
+ *   toast?: (msg: string) => void,
+ *   onFxChange?: () => void,
+ *   onBeatChip?: (state: { visible: boolean, text: string }) => void,
+ *   onImmersiveChange?: (on: boolean) => void,
+ * }} host
+ */
+export function createMineradioEngine(host) {
+'use strict';
+
+if (!host || !host.canvasContainer || !host.albumBg) {
+  throw new Error('[mineradio] host.canvasContainer and host.albumBg are required');
+}
+
+var __disposed = false;
+var __listeners = [];
+function __on(target, type, fn, opts) {
+  target.addEventListener(type, fn, opts);
+  __listeners.push([target, type, fn, opts]);
+}
+var __timers = [];
+function __interval(fn, ms) {
+  var id = setInterval(fn, ms);
+  __timers.push(id);
+  return id;
+}
+// 宿主 DOM 查询：优先在播放界面覆盖层内解析 id，避免与宿主应用冲突。
+var __doc = document;
+function byId(id) {
+  if (host.overlayRoot) {
+    var scoped = host.overlayRoot.querySelector('#' + id);
+    if (scoped) return scoped;
+  }
+  return __doc.getElementById(id);
+}
+function __qsa(selector) {
+  var root = host.overlayRoot || __doc;
+  return root.querySelectorAll(selector);
+}
+function __cssRoot() {
+  return host.overlayRoot || __doc.documentElement;
+}
+function __stateRoot() {
+  return host.overlayRoot || __doc.body;
+}
+function __assetUrl(name) {
+  var base = host.assetBase != null ? host.assetBase : '/mineradio/';
+  try { return new URL(base + name, window.location.href).href; } catch (e) { return base + name; }
+}
+
+// ============================================================
+//  Global State（Mineradio 原始全局状态的视觉子集）
+// ============================================================
+var audio = host.audio || null, audioCtx = null, source = null, analyser = null, beatAnalyser = null, gainNode = null, audioReady = false;
+var FFT_SIZE = 2048;
+var frequencyData = new Uint8Array(FFT_SIZE / 2);
+var timeDomainData = new Uint8Array(FFT_SIZE);
+var BEAT_FFT_SIZE = 2048;
+var beatFrequencyData = new Uint8Array(BEAT_FFT_SIZE / 2);
+var beatTimeDomainData = new Uint8Array(BEAT_FFT_SIZE);
+var bass = 0, mid = 0, treble = 0, audioEnergy = 0, beatPulse = 0, prevEnergy = 0;
+var lyricSunEnergy = 0, lyricSunTarget = 0, lyricSunHold = 0, lyricSunAvg = 0, lyricSunPeak = 0.55;
+var smoothBass = 0, smoothMid = 0, smoothTreb = 0, smoothEnergy = 0;
+var bassPeak = 0.12, midPeak = 0.10, treblePeak = 0.08, energyPeak = 0.10;
+var beatOnsetFlag = false;        // beat 上升沿瞬时标志,每帧消费一次
+var lastStrongDrop = 0;           // 用于 burst 预设的强 drop 时刻
+
+var lyricsLines = [], lyricsVisible = false, lyricsHasNativeKaraoke = false, lyricsTimingSource = 'none';
+var playQueue = [], currentIdx = -1, playing = false;
+var volumeTween = null, trackSwitchToken = 0;
+
+var LYRIC_LAYOUT_STORE_KEY = 'mineradio-lyric-layout-v1';
+var VISUAL_PRESET_SCHEMA = 'skull-preset-v2';
+var FREE_CAMERA_STORE_KEY = 'mineradio-free-camera-v1';
+var CONTROLS_AUTO_HIDE_STORE_KEY = 'mineradio-controls-auto-hide-v1';
+var LOCAL_BEATMAP_STORE_KEY = 'mineradio-local-beatmaps-v1';
+var LOCAL_BEAT_PREF_STORE_KEY = 'mineradio-local-beatmap-prefs-v1';
+var LOCAL_BEAT_COMBOS = ['', 'downbeat', 'push', 'drop', 'rebound', 'accent'];
+
+var currentLocalSong = null;
+var localBeatAnalysis = { song:null, audioUrl:'', mode:'mr', active:false, token:0 };
+var queueViewTab = 'queue', playMode = 'loop', miniQueueOpen = false;
+var desktopFullscreenActive = false;
+
+var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
+var coverDepthCache = Object.create(null), coverDepthCacheKeys = [];
+var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
+
+// v7.2: 离线节拍预解析
+var beatMapCache = {};       // { songId: { kicks: [t1, t2, ...], duration: ... } }
+var currentBeatMap = null;   // 当前播放的歌的 beatMap
+var beatMapNextIdx = 0;      // 下一个待触发的 kick index
+var beatMapBusy = false;     // 正在分析中
+var beatMapToken = 0;        // 取消旧分析
+var beatAnalysisTimer = null;
+var beatAnalysisStartedAt = 0;
+var beatPrefetchTimer = null;
+var beatPrefetchBusy = false;
+var beatPrefetchToken = 0;
+var beatPrefetchLastKey = '';
+var BEAT_PREFETCH_LIMIT = 2;
+var beatDiskCacheStatus = { checked:false, enabled:false, mode:'unknown', reason:'' };
+var beatDiskCacheNoticeLogged = false;
+var djBeatMapCache = {};
+var currentDjBeatMap = null;
+var djBeatMapNextIdx = 0;
+var djBeatPulseNextIdx = 0;
+var djBeatMapBusy = false;
+var djBeatMapToken = 0;
+var djBeatAnalysisTimer = null;
+var beatAnalysisConfig = {
+  delayMs: 1600,
+  minPlaybackSec: 1.2,
+  idleTimeout: 1400,
+  skipMusicTempoWhilePlaying: false
+};
+var beatCam = {
+  nextIdx: 0,
+  events: [],
+  punch: 0,
+  lookahead: 0.075,
+  lastTriggerAt: -10,
+  lastRealtimeAt: -10,
+  minInterval: 0.500,
+  fallbackMinInterval: 0.320,
+  realtimeMinInterval: 0.460,
+  realtimeMergeWindow: 0.135,
+  attack: 0.028,
+  hold: 0.030,
+  release: 0.185,
+  thetaKick: 0,
+  phiKick: 0,
+  radiusKick: 0,
+  rollKick: 0,
+  prevAudioTime: -1,
+  stats: { map: 0, live: 0, merged: 0, liveBlocked: 0 }
+};
+var liveCamAvg = 0, liveCamPeak = 0.28, liveCamLastRaw = 0;
+var cinemaDynamics = { avg: 0, lowAvg: 0, peak: 0.30, scale: 0.82 };
+var cinemaTrackProfile = {
+  scale: 1.0,
+  target: 1.0,
+  nameHint: 1.0,
+  frames: 0,
+  energyAvg: 0,
+  lowAvg: 0,
+  vocalAvg: 0,
+  melodyAvg: 0,
+  punchPeak: 0.10,
+  density: 0
+};
+var rtBeat = {
+  subFast: 0, subSlow: 0, lowFast: 0, lowSlow: 0,
+  bodyFast: 0, bodySlow: 0, vocalFast: 0, vocalSlow: 0, snapFast: 0, snapSlow: 0,
+  prevSub: 0, prevLow: 0, prevBody: 0, prevVocal: 0, prevSnap: 0, prevRms: 0,
+  onsetAvg: 0.012, onsetPeak: 0.060,
+  subPeak: 0.14, lowPeak: 0.18, bodyPeak: 0.16, vocalPeak: 0.16, snapPeak: 0.14,
+  lastHitAt: -10,
+  tempoGap: 0,
+  tempoConfidence: 0,
+  beatCount: 0,
+  primedFrames: 0,
+  warmupUntil: 0,
+  pulse: 0,
+  score: 0,
+  stats: { hits: 0, blocked: 0, assisted: 0, strong: 0, rejected: 0 }
+};
+var djMode = {
+  active: false,
+  songKey: '',
+  startedAt: 0,
+  lastNoticeAt: -100000,
+  tempoGap: 0,
+  tempoConfidence: 0,
+  sectionEnergy: 0,
+  sectionLow: 0,
+  sectionChange: 0,
+  visualPulse: 0,
+  lastBeatAt: -10
+};
+
+// fx 状态: 预设 + 主滑块 + 开关 + 三态
+var fxDefaults = {
+  preset: 0,            // 0=emily cover, 1=tunnel, 2=orbit, 3=void, 4=vinyl, 5=wallpaper, 6=skull
+  intensity: 0.85,
+  cinemaShake: 0.5,
+  depth: 1.0,
+  coverResolution: 1.55,
+  point: 1.0, speed: 1.0, twist: 0.0, color: 1.10, scatter: 0.0, bgFade: 0.20,
+  bloomStrength: 0.62,
+  lyricGlowStrength: 0.28,
+  lyricScale: 1.0,
+  lyricOffsetX: 0,
+  lyricOffsetY: 0,
+  lyricOffsetZ: 0,
+  lyricTiltX: 0,
+  lyricTiltY: 0,
+  lyricColorMode: 'auto',
+  lyricColor: '#a9b8c8',
+  lyricHighlightMode: 'auto',
+  lyricHighlightColor: '#fac900',
+  lyricGlowLinked: true,
+  lyricGlowColor: '#008aff',
+  lyricFont: 'hei',
+  lyricLetterSpacing: 0,
+  lyricLineHeight: 1.0,
+  lyricWeight: 900,
+  visualTintMode: 'auto',
+  visualTintColor: '#9db8cf',
+  uiAccentColor: '#ffffff',
+  homeAccentColor: '#ffffff',
+  homeIconColor: '#ffffff',
+  visualIconColor: '#ffffff',
+  backgroundColorMode: 'cover',
+  backgroundColor: '#000000',
+  backgroundOpacity: 1,
+  controlGlassChromaticOffset: 90,
+  backgroundColorCustom: false,
+  backgroundImage: '',
+  backgroundMedia: null,
+  desktopLyrics: false,
+  desktopLyricsSize: 1.0,
+  desktopLyricsOpacity: 0.92,
+  desktopLyricsY: 0.76,
+  desktopLyricsClickThrough: false,
+  desktopLyricsCinema: true,
+  desktopLyricsHighlight: false,
+  desktopLyricsFps: 60,
+  wallpaperMode: false,
+  wallpaperOpacity: 1,
+  floatLayer: false, cinema: true, edge: false, aiDepth: false, bloom: false, lyricGlow: true,
+  lyricGlowBeat: true,
+  lyricGlowParticles: false,
+  lyricCameraLock: false,
+  particleLyrics: true,    // v7.2: 粒子歌词
+  backCover: false,        // 旧的封面背面粒子层关闭；浮空粒子层会跟随封面翻转
+  shelf: 'off',
+  shelfCameraMode: 'static',
+  shelfPresence: 'always',
+  shelfShowPodcasts: false,
+  shelfMergeCollections: false,
+  shelfSize: 1,
+  shelfOffsetX: 0,
+  shelfOffsetY: 0,
+  shelfOffsetZ: 0,
+  shelfAngleY: -15,
+  shelfAngleYManual: false,
+  shelfOpacity: 1,
+  shelfBgOpacity: 0.90,
+  shelfAccentColor: '#ffffff',
+  performanceBackground: 'auto',
+  performanceQuality: 'high',
+  liveBackgroundKeep: false,
+  cam: 'off',
+};
+var PACKAGED_DEFAULT_USER_FX_ARCHIVE_NAME = '默认测试';
+var PACKAGED_DEFAULT_USER_FX_ARCHIVE_EXPORTED_AT = 1782276031784;
+var PACKAGED_DEFAULT_USER_FX_ARCHIVE_SAVED_AT = 1782273019045;
+var PACKAGED_DEFAULT_FX_SNAPSHOT = Object.freeze({
+  visualPresetSchema: VISUAL_PRESET_SCHEMA,
+  preset: 0,
+  intensity: 0.85,
+  cinemaShake: 0.5,
+  depth: 1,
+  coverResolution: 1.55,
+  point: 1,
+  speed: 1,
+  twist: 0,
+  color: 1.1,
+  scatter: 0,
+  bgFade: 0.2,
+  bloomStrength: 0.62,
+  lyricGlowStrength: 0.28,
+  lyricScale: 1,
+  lyricOffsetX: 0,
+  lyricOffsetY: 0,
+  lyricOffsetZ: 0,
+  lyricTiltX: 0,
+  lyricTiltY: 0,
+  lyricCameraLock: false,
+  lyricColorMode: 'auto',
+  lyricColor: '#a9b8c8',
+  lyricHighlightMode: 'auto',
+  lyricHighlightColor: '#fac900',
+  lyricGlowLinked: true,
+  lyricGlowColor: '#008aff',
+  lyricFont: 'hei',
+  lyricLetterSpacing: 0,
+  lyricLineHeight: 1,
+  lyricWeight: 900,
+  visualTintMode: 'auto',
+  visualTintColor: '#9db8cf',
+  uiAccentColor: '#ffffff',
+  homeAccentColor: '#ffffff',
+  homeIconColor: '#ffffff',
+  visualIconColor: '#ffffff',
+  backgroundColorMode: 'cover',
+  backgroundColor: '#000000',
+  backgroundOpacity: 1,
+  controlGlassChromaticOffset: 90,
+  backgroundColorCustom: false,
+  floatLayer: false,
+  cinema: true,
+  edge: false,
+  aiDepth: false,
+  bloom: false,
+  lyricGlow: true,
+  lyricGlowBeat: true,
+  lyricGlowParticles: false,
+  desktopLyrics: false,
+  desktopLyricsSize: 1,
+  desktopLyricsOpacity: 0.92,
+  desktopLyricsY: 0.76,
+  desktopLyricsClickThrough: false,
+  desktopLyricsCinema: true,
+  desktopLyricsHighlight: false,
+  desktopLyricsFps: 60,
+  performanceBackground: 'auto',
+  performanceQuality: 'high',
+  liveBackgroundKeep: false,
+  particleLyrics: true,
+  backCover: false,
+  shelf: 'off',
+  shelfCameraMode: 'static',
+  shelfPresence: 'always',
+  shelfShowPodcasts: false,
+  shelfMergeCollections: false,
+  shelfSize: 1,
+  shelfOffsetX: 0,
+  shelfOffsetY: 0,
+  shelfOffsetZ: 0,
+  shelfAngleY: -15,
+  shelfAngleYManual: false,
+  shelfOpacity: 1,
+  shelfBgOpacity: 0.9,
+  shelfAccentColor: '#ffffff',
+  cam: 'off'
+});
+var DEVELOPMENT_LOCKED_FX = {
+  wallpaperMode: true
+};
+function isDevelopmentLockedFx(key) {
+  return !!DEVELOPMENT_LOCKED_FX[key];
+}
+function normalizeDevelopmentLockedFxState() {
+  if (!fx) return;
+  fx.wallpaperMode = false;
+}
+
+// ---------- 小工具（原散落于宿主应用各处） ----------
+function escHtml(s){ var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function readBooleanPreference(key, fallback) {
+  try {
+    var raw = localStorage.getItem(key);
+    if (raw == null) return !!fallback;
+    return raw === '1';
+  } catch (e) {
+    return !!fallback;
+  }
+}
+function saveBooleanPreference(key, on) {
+  try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {}
+}
+function readHotkeySettings() { return {}; }
+function pulseObjectValue(target, key, amount, duration) {
+  if (!target) return;
+  target[key] = Math.max(target[key] || 0, amount || 1);
+  if (window.gsap) {
+    window.gsap.killTweensOf(target, key);
+    var vars = { duration: duration || 0.42, ease: 'power3.out' };
+    vars[key] = 0;
+    window.gsap.to(target, vars);
+  } else {
+    setTimeout(function(){ if (target) target[key] = 0; }, (duration || 0.42) * 1000);
+  }
+}
+
+// ---------- 歌曲模型适配（Sollin Song → Mineradio song） ----------
+function isInlineCoverSrc(url) {
+  return /^(?:data|blob|file):/i.test(String(url || ''));
+}
+// Sollin Electron 关闭 webSecurity，封面可直接跨域加载，无需 Mineradio 的 /api/cover 代理。
+function coverProxySrc(url) { return url || ''; }
+function coverUrlWithSize(url, size) {
+  if (!url || isInlineCoverSrc(url) || !/^https?:\/\//i.test(url)) return url || '';
+  if (!size) return url;
+  var param = 'param=' + size + 'y' + size;
+  if (/[?&]param=\d+y\d+/i.test(url)) return url.replace(/([?&])param=\d+y\d+/i, '$1' + param);
+  return url + (url.indexOf('?') >= 0 ? '&' : '?') + param;
+}
+function getCustomCoverForSong() { return ''; }
+function hydrateCustomCover(song) { return song; }
+function songCoverSrc(song, size) {
+  return song && song.cover ? coverUrlWithSize(song.cover, size) : '';
+}
+function cssImageUrl(url) {
+  return String(url || '').replace(/\\/g, '\\\\').replace(/"/g, '%22');
+}
+function songProviderKey(song) {
+  if (song && (song.provider === 'qq' || song.source === 'qq' || song.type === 'qq')) return 'qq';
+  return 'netease';
+}
+function currentCoverSong() {
+  if (currentIdx >= 0 && playQueue[currentIdx]) return playQueue[currentIdx];
+  return currentLocalSong || null;
+}
+function currentLyricSong() { return currentCoverSong(); }
+function currentLyricFallbackText() {
+  var song = currentLyricSong() || {};
+  var title = String(song.name || '').trim();
+  var artist = String(song.artist || '').trim();
+  if (!title) return '';
+  return artist ? title + ' - ' + artist : title;
+}
+var playbackQuality = 'exhigh';
+var qqPlaybackQualityCeiling = '';
+function normalizePlaybackQuality(value) { return value || 'exhigh'; }
+function hasProviderSvip() { return false; }
+var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
+
+// ---------- 鼠标 / 摄像头视差 ----------
+var pointerParallax = { x:0, y:0 };
+var pointerTarget = { x:0, y:0 };
+var headParallax = { x:0, y:0, active:false };
+var headNeutral = null;
+
+var desktopRuntimeState = {
+  desktop: false,
+  minimized: false,
+  visible: true,
+  focused: true,
+  fullscreen: false
+};
+var renderPowerState = { mode: '', width: 0, height: 0, pixelRatio: 0 };
+var backgroundCacheTrimTimer = 0;
+var runtimePerfState = {
+  lastCacheTrimAt: 0,
+  cacheTrimCount: 0,
+  lastCacheTrimReason: '',
+  lastHeapSampleAt: 0,
+  heapMB: 0,
+  cacheCounts: {}
+};
+
+// ---------- 面板/歌单架/杂项桩（对应未移植的宿主子系统） ----------
+var shelfManager = null;
+var shelfPinnedOpen = false;
+var shelfVisibility = { mode: 'off', visible: false };
+var shelfHoverCue = { active: false };
+var shelfLayoutProfile = { compact: false };
+var controlsAutoHide = false;
+var controlsHovering = false;
+var controlsHideTimer = null;
+var controlsHandleDimTimer = null;
+var controlsLastMoveAt = 0;
+var controlsShelfSuppressUntil = 0;
+var cursorHideTimer = null;
+var CURSOR_HIDE_DELAY = 2500;
+var fxPanelPinned = false;
+var immersiveMode = false;
+var diyPlayerMode = true;
+var startupVisualPreviewActive = false;
+var playbackVisualPreset = 0;
+var coverCropState = null, coverCropBound = false;
+var peekTimers = {};
+var PEEK_HIDE_DELAY = 170;
+var localBeatMapCache = {};
+var localBeatMapPrefs = {};
+var playlistCoverCache = {};
+var playlistPanelDetailState = null;
+var USER_CAPSULE_AUTO_HIDE_STORE_KEY = 'mineradio-user-capsule-auto-hide-v1';
+var PLAYLIST_PANEL_PIN_STORE_KEY = 'mineradio-playlist-panel-pinned-v1';
+var FX_FAB_AUTO_HIDE_STORE_KEY = 'mineradio-fx-fab-auto-hide-v1';
