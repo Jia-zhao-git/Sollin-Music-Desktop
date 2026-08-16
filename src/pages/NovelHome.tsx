@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, startTransition } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { BookOpen, ChevronLeft, ChevronRight, Clock3, Heart, LibraryBig, Loader2, Search, Sparkles } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, Clock3, Heart, LibraryBig, Loader2, Plus, Search, SearchX, Sparkles, X } from 'lucide-react'
+import StatusState from '@/components/StatusState'
 import novelApi from '@/services/novelApi'
 import { getDefaultNovelSourceId, getGroupedNovelSources, NOVEL_SOURCE_STORAGE_KEY } from '@/services/novelSources'
 import { useNovelStore } from '@/stores/novelStore'
-import type { NovelListItem, NovelListResult, NovelSourceId } from '@/types/novel'
+import type { LocalBook, NovelListItem, NovelListResult, NovelSourceId } from '@/types/novel'
 import { cn } from '@/utils/cn'
 
 const FALLBACK_COVER = 'data:image/svg+xml;utf8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480"%3E%3Cdefs%3E%3ClinearGradient id="g" x1="0" x2="1" y1="0" y2="1"%3E%3Cstop stop-color="%23171310"/%3E%3Cstop offset=".55" stop-color="%23422b17"/%3E%3Cstop offset="1" stop-color="%23080705"/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width="360" height="480" rx="28" fill="url(%23g)"/%3E%3Cpath d="M94 94h132a40 40 0 0 1 40 40v252H112a34 34 0 0 1-34-34V110a16 16 0 0 1 16-16z" fill="%23fff" opacity=".12"/%3E%3Cpath d="M116 144h108M116 182h92M116 220h118" stroke="%23fff" stroke-width="12" stroke-linecap="round" opacity=".35"/%3E%3Ctext x="180" y="352" fill="%23ffffff" opacity=".58" font-family="serif" font-size="28" text-anchor="middle"%3ENovel%3C/text%3E%3C/svg%3E'
@@ -15,7 +16,7 @@ function NovelCard({ item, compact = false, priority = false }: { item: NovelLis
 
   return (
     <button
-      onClick={() => navigate(`/novel/${item.id}`)}
+      onClick={() => navigate(item.sourceId === 'local' ? `/novel/${item.id}/chapter/ch-1` : `/novel/${item.id}`)}
       className={cn(
         'group shrink-0 text-left rounded-2xl overflow-hidden bg-white/75 dark:bg-stone-950/55 border border-black/5 dark:border-white/10 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all',
         compact ? 'w-36 sm:w-40' : 'w-full',
@@ -66,6 +67,40 @@ function MiniRail({ title, icon, items }: { title: string; icon: ReactNode; item
   )
 }
 
+function LocalBookCard({ book, onOpen, onRemove }: { book: LocalBook; onOpen: () => void; onRemove: () => void }) {
+  return (
+    <div className="group relative shrink-0 w-36 sm:w-40 text-left rounded-2xl overflow-hidden bg-white/75 dark:bg-stone-950/55 border border-black/5 dark:border-white/10 shadow-sm">
+      <button onClick={onOpen} className="block w-full text-left">
+        <div className="relative aspect-[3/4] bg-gradient-to-br from-stone-800 via-amber-900 to-black overflow-hidden">
+          {book.cover ? (
+            <img src={book.cover} alt={book.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center">
+              <BookOpen className="h-10 w-10 text-white/35" />
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+          <span className="absolute left-2 top-2 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">本地</span>
+          <div className="absolute left-2 right-2 bottom-2">
+            <span className="block truncate rounded-full bg-black/55 px-2 py-1 text-[11px] text-white backdrop-blur">{book.chapters.length} 章</span>
+          </div>
+        </div>
+        <div className="p-3">
+          <h3 className="font-semibold text-[var(--text-primary)] line-clamp-2 min-h-[2.7rem]">{book.name}</h3>
+          <p className="mt-1 text-xs text-[var(--text-muted)] truncate">{book.author || book.sourceName}</p>
+        </div>
+      </button>
+      <button
+        onClick={onRemove}
+        title="从本地书架移除"
+        className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-red-500 group-hover:opacity-100"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 function SourceSwitcher({ sourceId, onChange }: { sourceId: NovelSourceId; onChange: (sourceId: NovelSourceId) => void }) {
   const groups = useMemo(() => getGroupedNovelSources(), [])
   const active = Object.values(groups).flat().find((source) => source.id === sourceId)
@@ -105,6 +140,7 @@ function SourceSwitcher({ sourceId, onChange }: { sourceId: NovelSourceId; onCha
 
 export default function NovelHome() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const initialKeyword = searchParams.get('wd') || ''
   const initialSourceId = (searchParams.get('source') || (typeof window !== 'undefined' ? window.localStorage.getItem(NOVEL_SOURCE_STORAGE_KEY) : '') || getDefaultNovelSourceId()) as NovelSourceId
   const initialPage = Number(searchParams.get('page') || '1') || 1
@@ -135,6 +171,22 @@ export default function NovelHome() {
   const [error, setError] = useState<string | null>(null)
   const history = useNovelStore((state) => state.history)
   const favorites = useNovelStore((state) => state.favorites)
+  const localBooks = useNovelStore((state) => state.localBooks)
+  const addLocalBooks = useNovelStore((state) => state.addLocalBooks)
+  const removeLocalBook = useNovelStore((state) => state.removeLocalBook)
+
+  const handleImportLocal = async () => {
+    try {
+      const api = window.electronAPI
+      if (!api?.importLocalNovelFiles) return
+      const books = await api.importLocalNovelFiles()
+      if (books && books.length) {
+        addLocalBooks(books)
+      }
+    } catch (err) {
+      console.error('Import local novels failed:', err)
+    }
+  }
 
   useEffect(() => {
     const nextParams: Record<string, string> = {}
@@ -246,6 +298,44 @@ export default function NovelHome() {
         <div className="mb-9 space-y-6">
           <MiniRail title="继续阅读" icon={<Clock3 className="h-5 w-5 text-amber-500" />} items={history.map((item) => item.novel)} />
           <MiniRail title="我的书架" icon={<Heart className="h-5 w-5 text-amber-500" fill="currentColor" />} items={favorites} />
+
+          <section className="rounded-[1.75rem] border border-black/5 dark:border-white/10 bg-white/55 dark:bg-stone-950/35 p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <LibraryBig className="h-5 w-5 text-amber-500" />
+                <h2 className="text-xl font-black text-[var(--text-primary)]">本地书架</h2>
+                <span className="text-sm text-[var(--text-muted)]">导入的 TXT 文件</span>
+              </div>
+              <button
+                onClick={handleImportLocal}
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
+              >
+                <Plus className="h-4 w-4" /> 导入 TXT
+              </button>
+            </div>
+            {localBooks.length === 0 ? (
+              <button
+                onClick={handleImportLocal}
+                className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-black/10 dark:border-white/10 py-10 text-[var(--text-muted)] transition-colors hover:border-amber-400 hover:text-amber-500"
+              >
+                <Plus className="h-7 w-7" />
+                <span className="text-sm">导入本地 TXT 小说，离线也能读</span>
+              </button>
+            ) : (
+              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
+                {localBooks.map((book) => (
+                  <LocalBookCard
+                    key={book.id}
+                    book={book}
+                    onOpen={() => navigate(`/novel/${book.id}/chapter/${book.chapters[0]?.id || 'ch-1'}`)}
+                    onRemove={() => {
+                      if (window.confirm(`从本地书架移除「${book.name}」？\n（仅移除书架记录，不会删除原文件）`)) removeLocalBook(book.id)
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       )}
 
@@ -296,7 +386,7 @@ export default function NovelHome() {
             </div>
 
             {result && result.list.length === 0 && !loading && (
-              <div className="grid h-56 place-items-center rounded-3xl border border-dashed border-black/10 dark:border-white/10 text-[var(--text-muted)]">没有找到相关小说</div>
+              <StatusState variant="empty" icon={SearchX} title="没有找到相关小说" description="换个关键词或筛选条件再试试" />
             )}
 
             {result && result.pageCount > 1 && (

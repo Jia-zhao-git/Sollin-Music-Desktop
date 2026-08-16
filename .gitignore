@@ -21,3 +21,5 @@ pnpm-debug.log*
 *.mobileprovision
 *.cer
 *.crt
+# Agent workspace data (internal memory / working docs, not project source)
+.workbuddy/

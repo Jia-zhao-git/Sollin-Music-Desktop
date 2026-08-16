@@ -231,6 +231,31 @@ declare global {
       pushDataSyncSnapshot: (snapshot: import('@/types/dataSync').DataSyncSnapshotData) => Promise<void>
       onDataSyncStatus: (callback: (status: import('@/types/dataSync').DataSyncStatus) => void) => () => void
       onDataSyncSnapshot: (callback: (snapshot: import('@/types/dataSync').DataSyncSnapshot | null) => void) => () => void
+      importLocalNovelFiles: () => Promise<import('@/types/novel').LocalBook[] | null>
+      getVideoCacheDirectory: () => Promise<string>
+      pickVideoCacheDirectory: () => Promise<string | null>
+      setVideoCacheDirectory: (dir: string) => Promise<string>
+      startVideoDownload: (payload: {
+        taskId: string
+        videoName: string
+        episodeTitle: string
+        url: string
+        targetDirectory?: string
+        quality?: string
+      }) => Promise<{ taskId: string; filePath: string }>
+      cancelVideoDownload: (taskId: string) => Promise<boolean>
+      openVideoCacheItem: (filePath: string) => Promise<boolean>
+      showVideoCacheItemInFolder: (filePath: string) => Promise<boolean>
+      deleteVideoCacheItem: (filePath: string) => Promise<boolean>
+      listVideoCache: () => Promise<{ filePath: string; name: string; size: number; mtimeMs: number }[]>
+      onVideoDownloadEvent: (callback: (payload: {
+        taskId: string
+        status: 'pending' | 'downloading' | 'completed' | 'failed'
+        progress: number
+        filePath?: string
+        error?: string
+        warning?: string
+      }) => void) => () => void
     }
   }
 }

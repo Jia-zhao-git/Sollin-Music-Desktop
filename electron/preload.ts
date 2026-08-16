@@ -5,6 +5,7 @@ type HttpRequestOptions = {
   method?: string
   headers?: Record<string, string>
   body?: unknown
+  timeoutMs?: number
 }
 
 type HttpRequestResponse = {
@@ -147,6 +148,50 @@ type LocalSongMetadataDetail = {
 
 type LocalSongMetadataUpdatePayload = LocalSongMetadataRequest & {
   tags: LocalSongEmbeddedTags
+}
+
+type LocalChapterPayload = {
+  id: string
+  title: string
+  content: string
+}
+
+type LocalBookPayload = {
+  id: string
+  name: string
+  author?: string
+  cover?: string
+  sourceName: '本地导入'
+  chapters: LocalChapterPayload[]
+  importedAt: number
+  format: 'txt'
+}
+
+type VideoDownloadPayload = {
+  taskId: string
+  videoName: string
+  episodeTitle: string
+  url: string
+  targetDirectory?: string
+  quality?: string
+  videoId?: string
+}
+
+type VideoDownloadEventPayload = {
+  taskId: string
+  status: 'pending' | 'downloading' | 'completed' | 'failed'
+  progress: number
+  filePath?: string
+  error?: string
+  warning?: string
+}
+
+// 缓存目录中实际存在的视频文件（由 video:list-cache 扫描得到），用于「显示已缓存视频」。
+type VideoCacheFile = {
+  filePath: string
+  name: string
+  size: number
+  mtimeMs: number
 }
 
 type GlobalShortcutAction = 'playPause' | 'previous' | 'next'
@@ -315,6 +360,23 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, payload: DownloadEventPayload) => callback(payload)
     ipcRenderer.on('downloads:event', handler)
     return () => ipcRenderer.removeListener('downloads:event', handler)
+  },
+
+  importLocalNovelFiles: () => ipcRenderer.invoke('novel:import-files') as Promise<LocalBookPayload[] | null>,
+
+  getVideoCacheDirectory: () => ipcRenderer.invoke('video:get-cache-dir'),
+  pickVideoCacheDirectory: () => ipcRenderer.invoke('video:pick-cache-dir'),
+  setVideoCacheDirectory: (directory: string) => ipcRenderer.invoke('video:set-cache-dir', directory),
+  startVideoDownload: (payload: VideoDownloadPayload) => ipcRenderer.invoke('video:download', payload),
+  cancelVideoDownload: (taskId: string) => ipcRenderer.invoke('video:cancel-download', taskId),
+  openVideoCacheItem: (filePath: string) => ipcRenderer.invoke('video:open-item', filePath),
+  showVideoCacheItemInFolder: (filePath: string) => ipcRenderer.invoke('video:show-item', filePath),
+  deleteVideoCacheItem: (filePath: string) => ipcRenderer.invoke('video:delete-cache-item', filePath),
+  listVideoCache: () => ipcRenderer.invoke('video:list-cache') as Promise<VideoCacheFile[]>,
+  onVideoDownloadEvent: (callback: (payload: VideoDownloadEventPayload) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: VideoDownloadEventPayload) => callback(payload)
+    ipcRenderer.on('video:download-event', handler)
+    return () => ipcRenderer.removeListener('video:download-event', handler)
   },
 
   resolvePlayUrl: (url: string, headers?: Record<string, string>) =>

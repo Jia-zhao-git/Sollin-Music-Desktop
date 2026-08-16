@@ -3860,6 +3860,313 @@ function setupIpcHandlers() {
     return true
   })
 
+  // ---------------------------------------------------------------------------
+  // 本地小说导入（TXT）
+  // ---------------------------------------------------------------------------
+  function resolveUrl(base: string, relative: string): string {
+    try {
+      return new URL(relative, base).toString()
+    } catch {
+      return relative
+    }
+  }
+
+  function decodeTextBuffer(buffer: Buffer): string {
+    const asUtf8 = buffer.toString('utf8')
+    const replacementCount = (asUtf8.match(/�/g) || []).length
+    if (replacementCount === 0) return asUtf8
+    if (replacementCount < asUtf8.length * 0.02) return asUtf8
+    try {
+      return iconv.decode(buffer, 'gbk')
+    } catch {
+      return asUtf8
+    }
+  }
+
+  function parseNovelTextToChapters(raw: string): Array<{ title: string; content: string }> {
+    const text = raw.replace(/\r\n?/g, '\n')
+    const headingRegex = /^\s*(?:第\s*[0-9零一二三四五六七八九十百千两]+\s*[章回卷节部集]|Chapter\s*\d+|楔子|引子|番外|后记|尾声|序章|终章)\b/i
+    const lines = text.split('\n')
+    const chapters: Array<{ title: string; content: string }> = []
+    let current: { title: string; content: string } | null = null
+    let firstHeadingMatched = false
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      if (headingRegex.test(trimmed)) {
+        firstHeadingMatched = true
+        if (current) chapters.push(current)
+        current = { title: trimmed.slice(0, 80), content: '' }
+      } else {
+        if (!current) current = { title: '正文', content: '' }
+        current.content += `${line}\n`
+      }
+    }
+    if (current) chapters.push(current)
+
+    if (!firstHeadingMatched) {
+      return [{ title: '正文', content: text }]
+    }
+    return chapters.length ? chapters : [{ title: '正文', content: text }]
+  }
+
+  ipcMain.handle('novel:import-files', async() => {
+    const dialogOptions = {
+      title: '导入本地小说（TXT）',
+      properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'>,
+      filters: [{ name: '文本文件', extensions: ['txt'] }],
+    }
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+    if (result.canceled || result.filePaths.length === 0) return []
+
+    const books = result.filePaths.map((filePath) => {
+      const buffer = fs.readFileSync(filePath)
+      const text = decodeTextBuffer(buffer)
+      const chapters = parseNovelTextToChapters(text).map((chapter, index) => ({
+        id: `ch-${index + 1}`,
+        title: chapter.title,
+        content: chapter.content.trim(),
+      }))
+      const baseName = path.basename(filePath, path.extname(filePath))
+      const fileId = `local:${createHash('md5').update(filePath).digest('hex')}`
+      return {
+        id: fileId,
+        name: baseName,
+        sourceName: '本地导入' as const,
+        chapters,
+        importedAt: Date.now(),
+        format: 'txt' as const,
+      }
+    })
+
+    return books
+  })
+
+  // ---------------------------------------------------------------------------
+  // 视频下载 / 缓存
+  // ---------------------------------------------------------------------------
+  const activeVideoDownloads = new Map<string, AbortController>()
+
+  function getVideoCacheConfigPath() {
+    return path.join(app.getPath('userData'), 'video-cache-config.json')
+  }
+
+  function loadVideoCacheDirectory(): string {
+    try {
+      const configPath = getVideoCacheConfigPath()
+      if (fs.existsSync(configPath)) {
+        const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as { directory?: string }
+        if (parsed?.directory && typeof parsed.directory === 'string') return parsed.directory
+      }
+    } catch {}
+    return path.join(app.getPath('home'), 'Downloads', 'sollin-videos')
+  }
+
+  let videoCacheDirectory = loadVideoCacheDirectory()
+
+  function persistVideoCacheDirectory(directory: string) {
+    videoCacheDirectory = directory
+    try {
+      fs.writeFileSync(getVideoCacheConfigPath(), JSON.stringify({ directory }))
+    } catch {}
+  }
+
+  function emitVideoDownloadEvent(targetWindow: BrowserWindow | null, payload: any) {
+    if (!targetWindow || targetWindow.isDestroyed()) return
+    targetWindow.webContents.send('video:download-event', payload)
+  }
+
+  async function downloadHlsToConcatenatedFile(
+    playlistUrl: string,
+    targetDirectory: string,
+    baseName: string,
+    onProgress: (progress: number) => void,
+    signal: AbortSignal,
+  ): Promise<{ filePath: string; segmentCount: number; totalSegments: number }> {
+    const fetchFn = (globalThis as any).fetch as (input: string, init?: { signal?: AbortSignal }) => Promise<any>
+    if (!fetchFn) throw new Error('当前环境不支持网络下载')
+
+    const fetchText = async (url: string) => {
+      const response = await fetchFn(url, { signal })
+      if (!response?.ok) throw new Error(`获取播放列表失败 (${response?.status || 'unknown'})`)
+      return response.text() as Promise<string>
+    }
+
+    let mediaUrl = playlistUrl
+    let mediaPlaylist = await fetchText(playlistUrl)
+    const firstLines = mediaPlaylist.split('\n').map((line) => line.trim()).filter(Boolean)
+    const streamIndex = firstLines.findIndex((line) => line.startsWith('#EXT-X-STREAM-INF'))
+    if (streamIndex >= 0 && firstLines[streamIndex + 1]) {
+      mediaUrl = resolveUrl(playlistUrl, firstLines[streamIndex + 1])
+      mediaPlaylist = await fetchText(mediaUrl)
+    }
+
+    const segmentLines = mediaPlaylist
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+    if (!segmentLines.length) throw new Error('未解析到视频分片')
+
+    const totalSegments = segmentLines.length
+    const segments = segmentLines.slice(0, 2000).map((segment) => resolveUrl(mediaUrl, segment))
+    const outputPath = path.join(targetDirectory, `${baseName}.ts`)
+    const output = fs.createWriteStream(outputPath)
+    const concurrency = 4
+    let written = 0
+
+    try {
+      for (let start = 0; start < segments.length; start += concurrency) {
+        const batch = segments.slice(start, start + concurrency)
+        const buffers = await Promise.all(batch.map(async (segmentUrl) => {
+          const response = await fetchFn(segmentUrl, { signal })
+          if (!response?.ok) throw new Error(`分片下载失败 (${response?.status || 'unknown'})`)
+          return Buffer.from(await response.arrayBuffer())
+        }))
+        for (const buffer of buffers) {
+          await new Promise<void>((resolve, reject) => output.write(buffer, (error) => (error ? reject(error) : resolve())))
+          written += 1
+        }
+        onProgress(Math.min(99, Math.round((written / segments.length) * 100)))
+      }
+    } finally {
+      await new Promise<void>((resolve, reject) => output.end((error?: Error | null) => (error ? reject(error) : resolve())))
+    }
+
+    onProgress(100)
+    return { filePath: outputPath, segmentCount: segments.length, totalSegments }
+  }
+
+  async function handleVideoDownload(targetWindow: BrowserWindow | null, payload: any) {
+    const taskId: string = payload?.taskId
+    const url: string = payload?.url
+    if (!taskId || !url) throw new Error('下载参数不完整')
+
+    const targetDirectory = (payload?.targetDirectory || videoCacheDirectory || '').trim() || videoCacheDirectory
+    ensureDirectoryExists(targetDirectory)
+
+    const safeName = sanitizeFileNamePart(`${payload.videoName || 'video'}-${payload.episodeTitle || 'episode'}`, 'video')
+    const controller = new AbortController()
+    activeVideoDownloads.set(taskId, controller)
+    emitVideoDownloadEvent(targetWindow, { taskId, status: 'pending', progress: 0 })
+
+    try {
+      let filePath: string
+      if (/\.m3u8($|\?)/i.test(url)) {
+        const result = await downloadHlsToConcatenatedFile(url, targetDirectory, safeName, (progress) => {
+          emitVideoDownloadEvent(targetWindow, { taskId, status: 'downloading', progress })
+        }, controller.signal)
+        filePath = result.filePath
+      } else {
+        const tempPath = path.join(targetDirectory, `${taskId}.download`)
+        await downloadHttpSourceToFile(url, tempPath, (progress) => {
+          emitVideoDownloadEvent(targetWindow, { taskId, status: 'downloading', progress })
+        }, controller.signal)
+        const extension = getExtensionFromUrl(url) || '.mp4'
+        filePath = await getUniqueFilePath(targetDirectory, safeName, extension)
+        await fs.promises.rename(tempPath, filePath)
+      }
+
+      activeVideoDownloads.delete(taskId)
+      emitVideoDownloadEvent(targetWindow, { taskId, status: 'completed', progress: 100, filePath })
+      return { taskId, filePath }
+    } catch (error) {
+      activeVideoDownloads.delete(taskId)
+      const message = error instanceof Error ? error.message : '下载失败'
+      emitVideoDownloadEvent(targetWindow, { taskId, status: 'failed', progress: 0, error: message })
+      throw error
+    }
+  }
+
+  ipcMain.handle('video:get-cache-dir', () => videoCacheDirectory)
+
+  ipcMain.handle('video:pick-cache-dir', async() => {
+    const dialogOptions = {
+      title: '选择视频缓存目录',
+      defaultPath: videoCacheDirectory,
+      properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>,
+    }
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+    if (result.canceled || result.filePaths.length === 0) return null
+    persistVideoCacheDirectory(result.filePaths[0])
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('video:set-cache-dir', (_event, directory: unknown) => {
+    if (typeof directory === 'string' && directory.trim()) {
+      persistVideoCacheDirectory(directory.trim())
+    }
+    return videoCacheDirectory
+  })
+
+  ipcMain.handle('video:download', async(event, payload) => {
+    return handleVideoDownload(BrowserWindow.fromWebContents(event.sender), payload)
+  })
+
+  ipcMain.handle('video:cancel-download', (_event, taskId: unknown) => {
+    if (typeof taskId === 'string') {
+      activeVideoDownloads.get(taskId)?.abort()
+      activeVideoDownloads.delete(taskId)
+    }
+    return true
+  })
+
+  ipcMain.handle('video:open-item', async(_event, filePath: unknown) => {
+    if (typeof filePath !== 'string' || !filePath.trim()) throw new Error('文件路径无效')
+    const errorMessage = await shell.openPath(filePath)
+    if (errorMessage) throw new Error(errorMessage)
+    return true
+  })
+
+  ipcMain.handle('video:show-item', async(_event, filePath: unknown) => {
+    if (typeof filePath !== 'string' || !filePath.trim()) throw new Error('文件路径无效')
+    shell.showItemInFolder(filePath)
+    return true
+  })
+
+  // 真正删除磁盘上的缓存文件（「删除」不再只是移除列表记录）。
+  ipcMain.handle('video:delete-cache-item', async(_event, filePath: unknown) => {
+    if (typeof filePath !== 'string' || !filePath.trim()) throw new Error('文件路径无效')
+    try {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+      return true
+    } catch (error) {
+      throw new Error(`删除缓存文件失败：${(error as Error).message}`)
+    }
+  })
+
+  // 扫描缓存目录，返回实际存在的视频文件。用于「显示已缓存视频」——
+  // 即使 store 中的下载记录丢失（如清除 localStorage / 切换缓存目录），只要磁盘上仍有文件就能列出。
+  ipcMain.handle('video:list-cache', async() => {
+    const directory = videoCacheDirectory
+    try {
+      if (!directory || !fs.existsSync(directory)) return []
+      const entries = await fs.promises.readdir(directory, { withFileTypes: true })
+      const videoExtensions = new Set(['.mp4', '.mkv', '.webm', '.mov', '.avi', '.flv', '.ts', '.m4v', '.wmv', '.3gp'])
+      const files: Array<{ filePath: string; name: string; size: number; mtimeMs: number }> = []
+      for (const entry of entries) {
+        if (!entry.isFile()) continue
+        const ext = path.extname(entry.name).toLowerCase()
+        if (!videoExtensions.has(ext)) continue
+        try {
+          const fullPath = path.join(directory, entry.name)
+          const stats = await fs.promises.stat(fullPath)
+          files.push({ filePath: fullPath, name: entry.name, size: stats.size, mtimeMs: stats.mtimeMs })
+        } catch {
+          // 单个文件 stat 失败不影响整体
+        }
+      }
+      files.sort((a, b) => b.mtimeMs - a.mtimeMs)
+      return files
+    } catch {
+      return []
+    }
+  })
+
   // Desktop lyrics
   ipcMain.on('lyrics:update', (_event, lyric: string) => {
     latestLyric = lyric

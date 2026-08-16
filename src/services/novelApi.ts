@@ -342,9 +342,12 @@ const fetchStoList = async (params: { page?: number; keyword?: string; categoryI
 const fetchYoushuList = async (params: { page?: number; keyword?: string; categoryId?: string }): Promise<NovelListResult> => {
   const page = params.page || 1
   const categoryId = params.categoryId || 'xuanhuan'
-  const url = params.keyword
-    ? `https://www.95590.org/?s=${encodeURIComponent(params.keyword)}`
-    : `https://www.95590.org/${categoryId === 'xuanhuan' ? 'xuanhuan' : categoryId}/?p=${page}`
+  // 95590 站点的 ?s= 搜索入口已失效：对任意关键词都返回首页固定推荐（官场小说），
+  // 会把无关结果混进聚合搜索。这里在关键词模式下直接返回空，避免污染结果。
+  if (params.keyword) {
+    return { page, pageCount: page, total: 0, list: [], categories: [], sourceId: 'youshu95590', sourceName: getNovelSource('youshu95590').name }
+  }
+  const url = `https://www.95590.org/${categoryId === 'xuanhuan' ? 'xuanhuan' : categoryId}/?p=${page}`
   const html = await httpClient.getText(url, qimaoHeaders())
   const items = Array.from(html.matchAll(/<article[^>]*class="hentry"[\s\S]*?<h2[^>]*class="entry-title"[\s\S]*?<a href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)).map((m) => ({ href: m[1], title: m[2] }))
   const list = items.map((item): NovelListItem => ({
@@ -973,6 +976,18 @@ export const novelApi = {
         .filter((item): item is PromiseFulfilledResult<NovelListResult> => item.status === 'fulfilled')
         .map((item) => item.value)
       const list = dedupeNovelItems(results.flatMap((item) => item.list))
+      // 相关性排序：书名/作者命中关键词的排前，避免个别失效源返回的固定推荐污染结果。
+      const kw = keyword.toLowerCase()
+      const score = (item: NovelListItem) => {
+        const name = (item.name || '').toLowerCase()
+        const author = (item.author || '').toLowerCase()
+        if (name === kw) return 0
+        if (name.startsWith(kw)) return 1
+        if (name.includes(kw)) return 2
+        if (author.includes(kw)) return 3
+        return 4
+      }
+      list.sort((left, right) => score(left) - score(right))
       return {
         page: params.page || 1,
         pageCount: results.some((item) => item.pageCount > item.page) ? (params.page || 1) + 1 : (params.page || 1),
@@ -1079,11 +1094,25 @@ export const novelApi = {
       const text = await getDecodedText(detail.downloadUrl, qimaoHeaders())
       content = normalizeDownloadedContent(text)
     } else {
-      const parts: string[] = []
-      for (const chapter of detail.chapters.slice(0, 30)) {
-        const chapterResult = await this.getChapter(detail.id, chapter.id, detail.sourceId)
-        parts.push(`## ${chapterResult.title}\n\n${chapterResult.content}`)
-      }
+      // 全本下载：遍历全部章节（不再截断前 30 章），用有界并发池避免一次性打爆书源。
+      const chapters = detail.chapters
+      const parts = new Array<string>(chapters.length).fill('')
+      const CONCURRENCY = 5
+      let cursor = 0
+      const workers = Array.from({ length: Math.min(CONCURRENCY, chapters.length) }, async () => {
+        while (cursor < chapters.length) {
+          const index = cursor
+          cursor += 1
+          try {
+            const chapterResult = await this.getChapter(detail.id, chapters[index].id, detail.sourceId)
+            parts[index] = `## ${chapterResult.title}\n\n${chapterResult.content}`
+          } catch (error) {
+            console.error(`下载章节失败 ${chapters[index].title}:`, error)
+            parts[index] = `## ${chapters[index].title}\n\n（章节加载失败）`
+          }
+        }
+      })
+      await Promise.all(workers)
       content = normalizeDownloadedContent(parts.join('\n\n'))
     }
 

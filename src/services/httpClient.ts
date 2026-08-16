@@ -3,6 +3,7 @@ export interface HttpRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PROPFIND' | 'MKCOL' | 'HEAD' | string
   headers?: Record<string, string>
   body?: string
+  timeoutMs?: number
 }
 
 export interface HttpResponse {
@@ -31,6 +32,7 @@ export const httpClient = {
       method: options.method || 'GET',
       headers: options.headers,
       body: options.body,
+      signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
     })
 
     return {
@@ -45,8 +47,8 @@ export const httpClient = {
     return JSON.parse(response.bodyText) as T
   },
 
-  async getText(url: string, headers?: Record<string, string>): Promise<string> {
-    const response = await this.request({ url, method: 'GET', headers })
+  async getText(url: string, headers?: Record<string, string>, timeoutMs?: number): Promise<string> {
+    const response = await this.request({ url, method: 'GET', headers, timeoutMs })
     return response.bodyText
   },
 

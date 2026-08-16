@@ -15,12 +15,6 @@ import type {
 
 const DEFAULT_LIMIT = 20
 const CACHE_TTL = 5 * 60 * 1000
-const ROOT_TYPE_CHILDREN: Record<string, string[]> = {
-  movie: ['6', '7', '8', '9', '10', '11', '12', '20', '34'],
-  series: ['13', '14', '15', '16', '21', '22', '23', '24', '36'],
-  variety: ['25', '26', '27', '28'],
-  anime: ['29', '30', '31', '32', '33'],
-}
 const REQUEST_HEADERS = {
   Accept: 'application/json, text/plain, */*',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -289,18 +283,13 @@ const buildSourceCandidates = (sourceId?: string) => {
 const fetchSourceList = async (source: VideoSource, params: {
   page?: number
   typeId?: string
-  rootType?: string
   keyword?: string
   area?: string
   year?: string
   sort?: string
   limit?: number
+  timeoutMs?: number
 }): Promise<VideoListResult> => {
-  const rootChildren = params.rootType ? ROOT_TYPE_CHILDREN[params.rootType] || [] : []
-  const requestTypeIds = params.typeId
-    ? [params.typeId]
-    : rootChildren
-
   const fetchList = async (typeId?: string) => {
     const pageParam = source.pageParam || 'pg'
     const url = buildUrl(source.url, {
@@ -312,29 +301,22 @@ const fetchSourceList = async (source: VideoSource, params: {
       year: params.year,
       by: params.sort,
     })
-    const text = await getCached(`video:text:${url}`, () => httpClient.getText(url, REQUEST_HEADERS))
+    const text = await getCached(`video:text:${url}`, () => httpClient.getText(url, REQUEST_HEADERS, params.timeoutMs))
     return parseJsonText<VideoApiRawListResponse>(text, `${source.name}列表接口`)
   }
 
-  const responses = requestTypeIds.length > 0
-    ? await Promise.all(requestTypeIds.map((item) => fetchList(item)))
-    : [await fetchList(params.typeId)]
-
-  const response = responses[0]
-  const mergedList = responses.flatMap((item) => getResponseList(item).map((raw) => normalizeListItem(raw, source)))
-  const uniqueList = Array.from(new Map(mergedList.map((item) => [item.id, item])).values())
-  const filteredList = filterList(uniqueList, params)
+  const response = await fetchList(params.typeId)
+  const list = getResponseList(response).map((raw) => normalizeListItem(raw, source))
+  const filteredList = filterList(list, params)
   const categories = getResponseCategories(response).length ? normalizeCategories(getResponseCategories(response)) : await getCategoryList(source.id).catch(() => [])
   const meta = getResponseMeta(response)
   const limit = Number(meta.limit || params.limit || DEFAULT_LIMIT)
-  const pageCount = responses.length > 1
-    ? Math.max(...responses.map((item) => Number(getResponseMeta(item).pagecount || 1)))
-    : Number(meta.pagecount || 1)
+  const pageCount = Number(meta.pagecount || 1)
   const result = {
     page: Number(meta.page || params.page || 1),
     pageCount: Number.isFinite(pageCount) && pageCount > 0 ? pageCount : 1,
     limit: Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_LIMIT,
-    total: requestTypeIds.length > 1 ? responses.reduce((sum, item) => sum + Number(getResponseMeta(item).total || 0), 0) : Number(meta.total || 0),
+    total: Number(meta.total || 0),
     list: sortList(filteredList, params.sort),
     categories,
     sourceId: source.id,
@@ -348,7 +330,6 @@ export const videoApi = {
   async getList(params: {
     page?: number
     typeId?: string
-    rootType?: string
     keyword?: string
     area?: string
     year?: string
@@ -376,6 +357,85 @@ export const videoApi = {
 
       throw lastError instanceof Error ? lastError : new Error(`${primarySource.name}资源不可用`)
     })
+  },
+
+  // 聚合搜索：健康源优先、限并发、短超时，凑够目标数量即停止，按片名+年份去重合并。
+  // 不再依赖「当前源」，任何源命中都会被纳入结果。
+  async searchAll(params: {
+    keyword: string
+    page?: number
+    sort?: string
+    area?: string
+    year?: string
+    limit?: number
+  }): Promise<VideoListResult> {
+    const keyword = (params.keyword || '').trim()
+    if (!keyword) {
+      return {
+        page: 1, pageCount: 0, limit: DEFAULT_LIMIT, total: 0, list: [], categories: [],
+        sourceId: 'aggregate', sourceName: '聚合搜索',
+      }
+    }
+
+    const SEARCH_TIMEOUT_MS = 6000
+    const SEARCH_CONCURRENCY = 6
+    const SEARCH_MIN_RESULTS = 20
+
+    const page = params.page || 1
+    const limit = params.limit || DEFAULT_LIMIT
+    const sort = params.sort || 'time'
+    const area = params.area
+    const year = params.year
+
+    // 候选源排序：已确认健康的源优先，其次「推荐」组，其余殿后。
+    const ranked = [...VIDEO_SOURCES].sort((a, b) => {
+      const aHealthy = sourceHealthCache.get(a.id)?.ok ? 0 : 1
+      const bHealthy = sourceHealthCache.get(b.id)?.ok ? 0 : 1
+      if (aHealthy !== bHealthy) return aHealthy - bHealthy
+      const aRec = a.group === '推荐' ? 0 : 1
+      const bRec = b.group === '推荐' ? 0 : 1
+      if (aRec !== bRec) return aRec - bRec
+      return 0
+    })
+
+    const seen = new Map<string, VideoListItem>()
+    let reachedMin = false
+    let cursor = 0
+
+    const mergeItem = (item: VideoListItem) => {
+      const key = `${item.name.replace(/\s+/g, '').toLowerCase()}__${item.year || ''}`
+      if (!seen.has(key)) seen.set(key, item)
+    }
+
+    // 有界并发池：每个源带短超时，凑够目标数量即停止派发新的源请求。
+    const workers = Array.from({ length: Math.min(SEARCH_CONCURRENCY, ranked.length) }, async () => {
+      while (cursor < ranked.length && !reachedMin) {
+        const source = ranked[cursor]
+        cursor += 1
+        try {
+          const data = await fetchSourceList(source, { page, keyword, sort, area, year, limit, timeoutMs: SEARCH_TIMEOUT_MS })
+          for (const item of data.list) mergeItem(item)
+          if (seen.size >= SEARCH_MIN_RESULTS) reachedMin = true
+        } catch {
+          // 单源失败忽略，继续其它源
+        }
+      }
+    })
+    await Promise.all(workers)
+
+    const merged = [...seen.values()]
+    const total = merged.length
+
+    return {
+      page,
+      pageCount: Math.max(1, Math.ceil(total / limit)),
+      limit,
+      total,
+      list: sortList(merged, sort),
+      categories: [],
+      sourceId: 'aggregate',
+      sourceName: '聚合搜索',
+    }
   },
 
   async getDetail(id: string, sourceId?: string): Promise<VideoDetail | null> {

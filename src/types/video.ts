@@ -122,3 +122,18 @@ export type VideoListResult = {
   sourceName: string
   fallbackFrom?: string
 }
+
+/** 已下载/缓存的视频，用于「离线缓存」书架。 */
+export type VideoCacheItem = {
+  id: string
+  videoName: string
+  episodeTitle: string
+  url: string
+  filePath: string
+  size?: number
+  status: 'completed' | 'failed'
+  downloadedAt: number
+  quality?: string
+  /** 关联影片 id（来自下载时携带），用于「应用内直接播放」跳转到详情页；磁盘扫描得到的孤儿文件通常为空。 */
+  videoId?: string
+}

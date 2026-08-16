@@ -1,4 +1,4 @@
-export type NovelSourceId = 'qimao' | 'kuwo' | 'jiujiu9191' | 'boluomao' | 'sto66' | 'youshu95590' | 'shuhuangw' | 'shu52'
+export type NovelSourceId = 'qimao' | 'kuwo' | 'jiujiu9191' | 'boluomao' | 'sto66' | 'youshu95590' | 'shuhuangw' | 'shu52' | 'local'
 
 export type NovelSource = {
   id: NovelSourceId
@@ -52,6 +52,25 @@ export type NovelDownloadedBook = {
   sourceName: string
   content: string
   downloadedAt: number
+}
+
+/** 本地导入书籍的单章内容（含正文）。 */
+export type LocalChapter = {
+  id: string
+  title: string
+  content: string
+}
+
+/** 本地导入的书籍（TXT），整体随书架持久化在本地。 */
+export type LocalBook = {
+  id: string
+  name: string
+  author?: string
+  cover?: string
+  sourceName: '本地导入'
+  chapters: LocalChapter[]
+  importedAt: number
+  format: 'txt'
 }
 
 export type NovelListResult = {
