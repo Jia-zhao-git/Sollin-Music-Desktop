@@ -67,7 +67,7 @@ cp .env.example .env.local
 Available variables:
 
 ```env
-VITE_APP_VERSION=1.0.1
+VITE_APP_VERSION=1.0.2
 VITE_DEV_SERVER_PORT=5173
 VITE_GITHUB_REPO=Jia-zhao-git/JiaMusic
 VITE_GITHUB_ANNOUNCEMENT_REPO=Jia-zhao-git/JiaMusic

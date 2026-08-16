@@ -1,5 +1,5 @@
 // 应用配置
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.1'
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.2'
 export const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO || 'Jia-zhao-git/JiaMusic'
 const DEFAULT_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER = '1'
 
