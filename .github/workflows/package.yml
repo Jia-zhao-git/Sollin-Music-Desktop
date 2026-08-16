@@ -50,7 +50,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sollin-windows
+          name: zj-music-windows
           path: |
             release/*.exe
 
@@ -79,7 +79,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sollin-macos-x64
+          name: zj-music-macos-x64
           path: |
             release/*.dmg
             release/*.zip
@@ -109,7 +109,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sollin-macos-arm64
+          name: zj-music-macos-arm64
           path: |
             release/*.dmg
             release/*.zip
@@ -144,7 +144,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sollin-linux
+          name: zj-music-linux
           path: |
             release/*.AppImage
             release/*.deb
