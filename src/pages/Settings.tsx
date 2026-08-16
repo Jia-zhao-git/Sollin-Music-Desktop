@@ -1759,7 +1759,7 @@ export default function Settings() {
             textShadow: '0 0 40px rgba(250, 45, 72, 0.3)',
           }}
         >
-          Sollin
+          ZJ-Music
         </h1>
         {hitokoto && (
           <p
@@ -4593,17 +4593,15 @@ export default function Settings() {
         </div>
         <div className="p-4 text-center space-y-4">
           <div>
-            <h3 className="text-2xl font-bold text-primary-500">Sollin</h3>
-            <p className="text-sm text-[var(--text-muted)]">Sol（音阶）+ Lin</p>
+            <h3 className="text-2xl font-bold text-primary-500">ZJ-Music</h3>
             <p className="text-xs text-[var(--text-muted)] mt-1">v{APP_VERSION}</p>
           </div>
           <div className="text-sm text-[var(--text-muted)] space-y-1">
             {/* <p>一款为爱而生的音乐播放器 💕</p> */}
-            <p className="text-xs text-[var(--text-muted)]">XSL ❤️</p>
           </div>
           <div className="pt-4 border-t border-gray-100 dark:border-gray-800 text-sm">
             <p className="font-medium">开发者</p>
-            <p className="text-[var(--text-muted)]">Leguan ❤️</p>
+            <p className="text-[var(--text-muted)]">❤️Zhao \// Jia❤️</p>
           </div>
           {typeof window !== 'undefined' && window.electronAPI?.storeOpenRootPath && (
             <div className="pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
@@ -4625,7 +4623,7 @@ export default function Settings() {
               </button>
             </div>
           )}
-          <p className="text-xs text-[var(--text-muted)] pt-2">© 2025 Sollin. 所有数据保存在本地。</p>
+          <p className="text-xs text-[var(--text-muted)] pt-2">© 2025 ZJ-Music. 所有数据保存在本地。</p>
         </div>
       </section>
 

@@ -825,7 +825,7 @@ const handleImportScriptUrl = async(rawUrl: string) => {
     timeoutMs: 30000,
     maxRedirects: 3,
     headers: {
-      'user-agent': `Sollin/${app.getVersion()} LXSourceImporter`,
+      'user-agent': `ZJ-Music/${app.getVersion()} LXSourceImporter`,
       accept: 'application/javascript,text/javascript,text/plain,*/*',
     },
   })

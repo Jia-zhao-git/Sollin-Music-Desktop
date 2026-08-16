@@ -63,7 +63,7 @@ export default function GithubAnnouncementModal({ isOpen, announcement, onClose 
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm text-primary-500 font-medium">项目公告</p>
-                  <h2 className="text-xl font-bold mt-1">Sollin Music Desktop</h2>
+                  <h2 className="text-xl font-bold mt-1">ZJ-Music Music Desktop</h2>
                   <p className="text-sm text-[var(--text-muted)] mt-1">
                     {announcement.author}{displayDate ? ` · ${displayDate}` : ''}
                   </p>

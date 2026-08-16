@@ -8,6 +8,17 @@ export type VideoHistoryItem = {
   currentTime?: number
 }
 
+// 进行中的缓存任务（按「集数 url」索引），存于全局 store 而非页面组件内，
+// 这样切换到其他页面后进度/完成事件仍能持续写入，不会随页面卸载丢失。
+export type ActiveVideoDownloadStatus = 'pending' | 'downloading' | 'completed' | 'failed'
+export type ActiveVideoDownload = {
+  progress: number
+  status: ActiveVideoDownloadStatus
+  taskId?: string
+  filePath?: string
+  error?: string
+}
+
 type VideoState = {
   currentVideo: VideoDetail | null
   currentEpisode: VideoEpisode | null
@@ -16,6 +27,9 @@ type VideoState = {
   watchLater: VideoListItem[]
   cacheDirectory: string
   downloads: VideoCacheItem[]
+  activeDownloads: Record<string, ActiveVideoDownload>
+  setActiveDownload: (url: string, patch: Partial<ActiveVideoDownload>) => void
+  clearActiveDownload: (url: string) => void
   setCurrentVideo: (video: VideoDetail | null, episode?: VideoEpisode | null) => void
   setCurrentEpisode: (episode: VideoEpisode | null) => void
   upsertHistory: (item: VideoHistoryItem) => void
@@ -91,6 +105,7 @@ export const useVideoStore = create<VideoState>((set, get) => ({
   watchLater: readJson<VideoListItem[]>(WATCH_LATER_KEY, []),
   cacheDirectory: readJson<string>(CACHE_DIR_KEY, ''),
   downloads: readJson<VideoCacheItem[]>(DOWNLOADS_KEY, []),
+  activeDownloads: {},
 
   setCurrentVideo: (video, episode = null) => set({ currentVideo: video, currentEpisode: episode }),
   setCurrentEpisode: (episode) => set({ currentEpisode: episode }),
@@ -161,6 +176,20 @@ export const useVideoStore = create<VideoState>((set, get) => ({
     set({ cacheDirectory: directory })
   },
 
+  setActiveDownload: (url, patch) => set((state) => ({
+    activeDownloads: {
+      ...state.activeDownloads,
+      [url]: { ...state.activeDownloads[url], ...patch },
+    },
+  })),
+
+  clearActiveDownload: (url) => set((state) => {
+    if (!state.activeDownloads[url]) return state
+    const next = { ...state.activeDownloads }
+    delete next[url]
+    return { activeDownloads: next }
+  }),
+
   addDownload: (item) => set((state) => {
     const next = [item, ...state.downloads.filter((download) => download.id !== item.id)].slice(0, 200)
     writeJson(DOWNLOADS_KEY, next)
@@ -191,7 +220,18 @@ export const useVideoStore = create<VideoState>((set, get) => ({
       .filter((file) => !keptPaths.has(file.filePath))
       .map((file) => buildCacheItemFromFile(file))
     const merged = [...kept, ...orphans].sort((a, b) => (b.downloadedAt || 0) - (a.downloadedAt || 0))
-    writeJson(DOWNLOADS_KEY, merged)
-    set({ downloads: merged })
+
+    // 按 filePath 去重（防御性）：旧版本曾用不同 id 规则（cache::url 与 cache:filePath），
+    // 导致同一文件产生两条记录；这里保留元数据更完整（含 url/videoId/集数）的一条，自愈历史脏数据。
+    const metaScore = (item: VideoCacheItem) =>
+      (item.url ? 1 : 0) + (item.videoId ? 1 : 0) + (item.episodeTitle ? 1 : 0)
+    const dedupedMap = new Map<string, VideoCacheItem>()
+    for (const item of merged) {
+      const existing = dedupedMap.get(item.filePath)
+      if (!existing || metaScore(item) > metaScore(existing)) dedupedMap.set(item.filePath, item)
+    }
+    const deduped = [...dedupedMap.values()].sort((a, b) => (b.downloadedAt || 0) - (a.downloadedAt || 0))
+    writeJson(DOWNLOADS_KEY, deduped)
+    set({ downloads: deduped })
   },
 }))

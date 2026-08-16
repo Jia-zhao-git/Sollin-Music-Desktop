@@ -1752,7 +1752,7 @@ export class DataSyncLxCompatBridge {
     return rsaEncrypt(Buffer.from(JSON.stringify({
       clientId: keyInfo.clientId,
       key: keyInfo.key,
-      serverName: app.name || 'Sollin',
+      serverName: app.name || 'ZJ-Music',
     })), publicKey)
   }
 

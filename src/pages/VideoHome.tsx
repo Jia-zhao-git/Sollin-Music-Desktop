@@ -348,12 +348,16 @@ export default function VideoHome() {
     removeDownload(id)
   }
 
-  // 离线缓存「播放」：有影片 id 则跳详情页并携带 ?offline= 自动离线播放；否则直接打开本地文件。
+  // 离线缓存「播放」：有影片 id 则跳详情页并携带 ?offline= 自动离线播放；
+  // 孤儿文件（无 videoId）走应用内离线播放页，复用主播放器，不再丢给系统外部播放器。
   const handlePlayOfflineItem = (item: VideoCacheItem) => {
     if (item.videoId) {
       navigate(`/video/${item.videoId}?offline=${encodeURIComponent(item.filePath)}`)
     } else {
-      window.electronAPI?.openVideoCacheItem(item.filePath)
+      const params = new URLSearchParams({ file: item.filePath })
+      if (item.videoName) params.set('name', item.videoName)
+      if (item.episodeTitle) params.set('title', item.episodeTitle)
+      navigate(`/video/offline?${params.toString()}`)
     }
   }
 

@@ -25,6 +25,7 @@ import {
   type GithubAnnouncement,
 } from '@/services/githubAnnouncement'
 import { downloadManager } from '@/services/downloadManager'
+import { videoDownloadManager } from '@/services/videoDownloadManager'
 import { refreshAutoUpdateOnlinePlaylists } from '@/services/onlinePlaylistAutoUpdate'
 import dataSyncService from '@/services/dataSync'
 import { applyDataSyncSnapshotData, buildDataSyncSnapshotData, isDataSyncSnapshotEmpty } from '@/services/dataSyncState'
@@ -56,6 +57,7 @@ const PlaylistExplore = lazy(() => import('@/pages/PlaylistExplore'))
 const DailyRecommend = lazy(() => import('@/pages/DailyRecommend'))
 const VideoHome = lazy(() => import('@/pages/VideoHome'))
 const VideoDetail = lazy(() => import('@/pages/VideoDetail'))
+const VideoOfflinePlayback = lazy(() => import('@/pages/VideoOfflinePlayback'))
 const NovelHome = lazy(() => import('@/pages/NovelHome'))
 const NovelDetail = lazy(() => import('@/pages/NovelDetail'))
 const NovelReader = lazy(() => import('@/pages/NovelReader'))
@@ -159,6 +161,7 @@ function App() {
     analytics.start()
 
     void downloadManager.ensureInitialized()
+    void videoDownloadManager.ensureInitialized()
 
     const scheduleSnapshotPush = () => {
       if (isApplyingRemoteSnapshotRef.current) return
@@ -551,6 +554,7 @@ function App() {
           <Route path="daily-recommend" element={<Suspense><DailyRecommend /></Suspense>} />
           <Route path="video" element={<Suspense><VideoHome /></Suspense>} />
           <Route path="video/:id" element={<Suspense><VideoDetail /></Suspense>} />
+          <Route path="video/offline" element={<Suspense><VideoOfflinePlayback /></Suspense>} />
           <Route path="novel" element={<Suspense><NovelHome /></Suspense>} />
           <Route path="novel/:id" element={<Suspense><NovelDetail /></Suspense>} />
           <Route path="novel/:id/chapter/:chapterId" element={<Suspense><NovelReader /></Suspense>} />

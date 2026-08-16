@@ -1,13 +1,13 @@
-# Sollin｜A music playback client that is compatible with both online and local music.
+# ZJ-Music｜A music playback client that is compatible with both online and local music.
 
 <p>
 
 Blog: [月明星稀](https://www.ymxx.net)
 
 [中文](README.md) | English
-  <a href="https://github.com/Ryderwe/Sollin-Music-Desktop/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/Ryderwe/Sollin-Music-Desktop?include_prereleases&style=flat-square"></a>
-  <a href="https://github.com/Ryderwe/Sollin-Music-Desktop/releases"><img alt="Total release downloads" src="https://img.shields.io/github/downloads/Ryderwe/Sollin-Music-Desktop/total?style=flat-square&label=Total%20Release%20Downloads&color=F08AA8"></a>
-  <img alt="Repository views" src="https://visitor-badge.laobi.icu/badge?page_id=Ryderwe.Sollin-Music-Desktop&left_text=Repository%20Views&left_color=%235B78FF&right_color=%23F08AA8">
+  <a href="https://github.com/Jia-zhao-git/JiaMusic/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/Jia-zhao-git/JiaMusic?include_prereleases&style=flat-square"></a>
+  <a href="https://github.com/Jia-zhao-git/JiaMusic/releases"><img alt="Total release downloads" src="https://img.shields.io/github/downloads/Jia-zhao-git/JiaMusic/total?style=flat-square&label=Total%20Release%20Downloads&color=F08AA8"></a>
+  <img alt="Repository views" src="https://visitor-badge.laobi.icu/badge?page_id=Jia-zhao-git.JiaMusic&left_text=Repository%20Views&left_color=%235B78FF&right_color=%23F08AA8">
   <img alt="Electron 28" src="https://img.shields.io/badge/Electron-28-47848F?logo=electron&logoColor=white&style=flat-square">
   <img alt="React 18" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=20232A&style=flat-square">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white&style=flat-square">
@@ -17,9 +17,9 @@ Blog: [月明星稀](https://www.ymxx.net)
 
 [中文](README.md) | English
 
-Sollin is a cross-platform desktop music player built with Electron, React, TypeScript, Vite and Tailwind CSS. It focuses on local playback and online playback. Local playback covers the local library, playlists, lyrics, downloads and backups. Online playback depends on user-imported LX JS source scripts.
+ZJ-Music is a cross-platform desktop music player built with Electron, React, TypeScript, Vite and Tailwind CSS. It focuses on local playback and online playback. Local playback covers the local library, playlists, lyrics, downloads and backups. Online playback depends on user-imported LX JS source scripts.
 
-Sollin Desktop has been open source since version `1.3.1`. This open-source edition does not include private server account, activation or server cloud backup features. It also does not include private source scripts or private music APIs. Announcements can optionally be read from public GitHub Issue comments and do not depend on a private backend.
+ZJ-Music Desktop has been open source since version `1.3.1`. This open-source edition does not include private server account, activation or server cloud backup features. It also does not include private source scripts or private music APIs. Announcements can optionally be read from public GitHub Issue comments and do not depend on a private backend.
 
 ## Contents
 
@@ -67,12 +67,12 @@ cp .env.example .env.local
 Available variables:
 
 ```env
-VITE_APP_VERSION=1.3.1
+VITE_APP_VERSION=1.0.1
 VITE_DEV_SERVER_PORT=5173
-VITE_GITHUB_REPO=Ryderwe/Sollin-Music-Desktop
-VITE_GITHUB_ANNOUNCEMENT_REPO=Ryderwe/Sollin-Music-Desktop
+VITE_GITHUB_REPO=Jia-zhao-git/JiaMusic
+VITE_GITHUB_ANNOUNCEMENT_REPO=Jia-zhao-git/JiaMusic
 VITE_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER=1
-VITE_GITHUB_ANNOUNCEMENT_AUTHOR=ryderwe
+VITE_GITHUB_ANNOUNCEMENT_AUTHOR=Jia-zhao-git
 ```
 
 Configuration reference:
@@ -82,7 +82,7 @@ Configuration reference:
 - `VITE_GITHUB_REPO`: GitHub repository used for update checks, in `owner/repo` format.
 - `VITE_GITHUB_ANNOUNCEMENT_REPO`: GitHub repository used for announcement comments, in `owner/repo` format. Defaults to `VITE_GITHUB_REPO`.
 - `VITE_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER`: Issue number used for announcements. The official default is `1`; set it explicitly to an empty value to disable announcement checks.
-- `VITE_GITHUB_ANNOUNCEMENT_AUTHOR`: only comments published by this GitHub user are shown. Defaults to `ryderwe`.
+- `VITE_GITHUB_ANNOUNCEMENT_AUTHOR`: only comments published by this GitHub user are shown. Defaults to `Jia-zhao-git`.
 
 The open-source edition does not require a private service URL. Do not commit `.env.local`, tokens, certificates, local machine paths or internal API documents.
 
@@ -266,7 +266,7 @@ The open-source edition can read announcements from public GitHub Issue comments
 Usage:
 
 1. Create a fixed public Issue in the repository, for example with the title `Announcements`.
-2. Publish announcement comments in that Issue only from the `ryderwe` account.
+2. Publish announcement comments in that Issue only from the `Jia-zhao-git` account.
 3. Set the Issue number in `.env.local` as `VITE_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER`.
 
 This feature only calls GitHub's public API. It does not need a token and does not connect to a private backend.
@@ -484,7 +484,7 @@ Confirm that `VITE_GITHUB_REPO` points to a public repository and that the repos
 
 ## Acknowledgements
 
-Sollin is an independent project, but it benefits from the ideas and ecosystem built by these open-source projects:
+ZJ-Music is an independent project, but it benefits from the ideas and ecosystem built by these open-source projects:
 
 - [LX Music Desktop](https://github.com/lyswhut/lx-music-desktop): reference and inspiration for desktop music player behavior, local data workflows, sync concepts and the LX source script ecosystem.
 - [Mineradio](https://github.com/XxHuberrr/Mineradio.git): source and reference for the ported Mineradio playback visual engine, stage lyrics and motion effects.
@@ -499,10 +499,10 @@ MIT. See [LICENSE](LICENSE).
 
 ## Star History
 
-<a href="https://www.star-history.com/?type=date&repos=Ryderwe%2FSollin-Music-Desktop">
+<a href="https://www.star-history.com/?type=date&repos=Jia-zhao-git%2FJiaMusic">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Ryderwe/Sollin-Music-Desktop&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Ryderwe/Sollin-Music-Desktop&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Ryderwe/Sollin-Music-Desktop&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Jia-zhao-git/JiaMusic&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Jia-zhao-git/JiaMusic&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Jia-zhao-git/JiaMusic&type=date&legend=top-left" />
  </picture>
 </a>

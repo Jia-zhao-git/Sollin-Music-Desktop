@@ -198,7 +198,7 @@ export default function MiniPlayer() {
           <div className="flex min-w-0 flex-1 flex-col self-stretch">
             <div className="flex items-start justify-between gap-2">
               <p className="min-w-0 flex-1 truncate pr-1 text-[14px] font-semibold text-[var(--text-primary)]">
-                {displaySong?.name || 'Sollin Mini'}
+                {displaySong?.name || 'ZJ-Music Mini'}
               </p>
 
               <div className="no-drag flex shrink-0 items-center gap-1">

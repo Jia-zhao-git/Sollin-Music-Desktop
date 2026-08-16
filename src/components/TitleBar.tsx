@@ -70,7 +70,7 @@ export default function TitleBar() {
         {/* App title */}
         <div className="flex items-center gap-2 px-4">
           <div className="w-4 h-4 rounded-full bg-gradient-to-br from-primary-500 to-pink-500" />
-          <span className="text-sm font-medium text-[var(--text-secondary)]">Sollin</span>
+          <span className="text-sm font-medium text-[var(--text-secondary)]">ZJ-Music</span>
         </div>
 
         {/* Window controls */}
@@ -142,7 +142,7 @@ export default function TitleBar() {
                 </div>
                 <div className="text-left">
                   <p className="font-medium">退出应用</p>
-                  <p className="text-xs text-[var(--text-muted)]">完全关闭 Sollin</p>
+                  <p className="text-xs text-[var(--text-muted)]">完全关闭 ZJ-Music</p>
                 </div>
               </button>
             </div>

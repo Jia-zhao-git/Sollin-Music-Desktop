@@ -55,6 +55,32 @@ const buildCommentsUrl = (owner: string, repo: string, issueNumber: number, page
   return `https://api.github.com/repos/${safeOwner}/${safeRepo}/issues/${issueNumber}/comments?per_page=100&page=${page}`
 }
 
+const buildIssueUrl = (owner: string, repo: string, issueNumber: number) => {
+  const safeOwner = encodeURIComponent(owner)
+  const safeRepo = encodeURIComponent(repo)
+  return `https://api.github.com/repos/${safeOwner}/${safeRepo}/issues/${issueNumber}`
+}
+
+const fetchIssue = async(owner: string, repo: string, issueNumber: number) => {
+  const response = await fetch(buildIssueUrl(owner, repo, issueNumber), {
+    headers: {
+      Accept: 'application/vnd.github+json',
+    },
+  })
+
+  if (!response.ok) return null
+
+  const issue = await response.json() as {
+    id?: number
+    body?: string
+    html_url?: string
+    created_at?: string
+    updated_at?: string
+    user?: { login?: string }
+  }
+  return issue
+}
+
 const fetchCommentPage = async(owner: string, repo: string, issueNumber: number, page: number) => {
   const response = await fetch(buildCommentsUrl(owner, repo, issueNumber, page), {
     headers: {
@@ -85,6 +111,31 @@ const toAnnouncement = (comment: GithubIssueComment, issueNumber: number): Githu
     author: comment.user?.login || GITHUB_ANNOUNCEMENT_AUTHOR,
     createdAt: comment.created_at,
     updatedAt: comment.updated_at,
+  }
+}
+
+const toIssueAnnouncement = (
+  issue: {
+    id?: number
+    body?: string
+    html_url?: string
+    created_at?: string
+    updated_at?: string
+    user?: { login?: string }
+  },
+  issueNumber: number,
+): GithubAnnouncement | null => {
+  const body = String(issue.body || '').trim()
+  if (!body) return null
+  if (normalizeLogin(issue.user?.login || '') !== normalizeLogin(GITHUB_ANNOUNCEMENT_AUTHOR)) return null
+
+  return {
+    id: `issue-${issueNumber}`,
+    body,
+    htmlUrl: issue.html_url || `https://github.com/${GITHUB_ANNOUNCEMENT_REPO}/issues/${issueNumber}`,
+    author: issue.user?.login || GITHUB_ANNOUNCEMENT_AUTHOR,
+    createdAt: issue.created_at,
+    updatedAt: issue.updated_at,
   }
 }
 
@@ -137,8 +188,14 @@ export const fetchGithubAnnouncementHistory = async(): Promise<GithubAnnouncemen
     .map((page) => fetchCommentPage(owner, repo, issueNumber, page))
 
   const rest = await Promise.all(otherPages)
-  return filterAuthorComments([
-    ...firstPage.comments,
-    ...rest.flatMap((page) => page.comments),
-  ], issueNumber)
+  const issue = await fetchIssue(owner, repo, issueNumber)
+  const issueAnnouncement = issue ? toIssueAnnouncement(issue, issueNumber) : null
+
+  return sortAnnouncements([
+    ...filterAuthorComments([
+      ...firstPage.comments,
+      ...rest.flatMap((page) => page.comments),
+    ], issueNumber),
+    ...(issueAnnouncement ? [issueAnnouncement] : []),
+  ])
 }

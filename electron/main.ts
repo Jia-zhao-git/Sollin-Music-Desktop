@@ -3183,7 +3183,7 @@ function updateMacDockMenu() {
 function updateTrayTooltip() {
   if (!tray) return
   if (playerMediaState.empty || !playerMediaState.title) {
-    tray.setToolTip('Sollin')
+    tray.setToolTip('ZJ-Music')
     return
   }
   const title = playerMediaState.title.length > 40
@@ -3194,7 +3194,7 @@ function updateTrayTooltip() {
       ? `${playerMediaState.artist.slice(0, 40)}...`
       : playerMediaState.artist
     : ''
-  tray.setToolTip(artist ? `Sollin\n${title}\n${artist}` : `Sollin\n${title}`)
+  tray.setToolTip(artist ? `ZJ-Music\n${title}\n${artist}` : `ZJ-Music\n${title}`)
 }
 
 function applyPlayerMediaState(partial: Partial<PlayerMediaState>) {
@@ -3275,7 +3275,7 @@ function createTray() {
 
   tray = new Tray(icon)
 
-  tray.setToolTip('Sollin')
+  tray.setToolTip('ZJ-Music')
   updateTrayContextMenu()
   updateMacDockMenu()
 
@@ -3981,8 +3981,7 @@ function setupIpcHandlers() {
 
   async function downloadHlsToConcatenatedFile(
     playlistUrl: string,
-    targetDirectory: string,
-    baseName: string,
+    outputPath: string,
     onProgress: (progress: number) => void,
     signal: AbortSignal,
   ): Promise<{ filePath: string; segmentCount: number; totalSegments: number }> {
@@ -4012,7 +4011,6 @@ function setupIpcHandlers() {
 
     const totalSegments = segmentLines.length
     const segments = segmentLines.slice(0, 2000).map((segment) => resolveUrl(mediaUrl, segment))
-    const outputPath = path.join(targetDirectory, `${baseName}.ts`)
     const output = fs.createWriteStream(outputPath)
     const concurrency = 4
     let written = 0
@@ -4052,15 +4050,19 @@ function setupIpcHandlers() {
     activeVideoDownloads.set(taskId, controller)
     emitVideoDownloadEvent(targetWindow, { taskId, status: 'pending', progress: 0 })
 
+    let filePath = ''
+    let outputPath: string | undefined
+    let tempPath: string | undefined
     try {
-      let filePath: string
       if (/\.m3u8($|\?)/i.test(url)) {
-        const result = await downloadHlsToConcatenatedFile(url, targetDirectory, safeName, (progress) => {
+        // 走 getUniqueFilePath 去重：同名剧集（如多部电影单集都叫「HD中字」）不会互相覆盖。
+        outputPath = await getUniqueFilePath(targetDirectory, safeName, '.ts')
+        const result = await downloadHlsToConcatenatedFile(url, outputPath, (progress) => {
           emitVideoDownloadEvent(targetWindow, { taskId, status: 'downloading', progress })
         }, controller.signal)
         filePath = result.filePath
       } else {
-        const tempPath = path.join(targetDirectory, `${taskId}.download`)
+        tempPath = path.join(targetDirectory, `${taskId}.download`)
         await downloadHttpSourceToFile(url, tempPath, (progress) => {
           emitVideoDownloadEvent(targetWindow, { taskId, status: 'downloading', progress })
         }, controller.signal)
@@ -4074,6 +4076,17 @@ function setupIpcHandlers() {
       return { taskId, filePath }
     } catch (error) {
       activeVideoDownloads.delete(taskId)
+      // 清理半成品：m3u8 的 .ts / 非 m3u8 的 .download 若残留，会被「离线缓存」当成可用视频（.ts 在扫描扩展名内），
+      // 造成“打不开的幽灵条目”。取消与失败都要删。
+      for (const candidate of [outputPath, tempPath]) {
+        if (candidate) {
+          try {
+            if (fs.existsSync(candidate)) fs.unlinkSync(candidate)
+          } catch {
+            // 清理失败不影响主流程
+          }
+        }
+      }
       const message = error instanceof Error ? error.message : '下载失败'
       emitVideoDownloadEvent(targetWindow, { taskId, status: 'failed', progress: 0, error: message })
       throw error

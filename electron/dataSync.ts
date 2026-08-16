@@ -191,7 +191,7 @@ const getLocalDeviceId = () => {
   return deviceId
 }
 
-const getDeviceName = () => os.hostname() || 'Sollin'
+const getDeviceName = () => os.hostname() || 'ZJ-Music'
 
 const getDeviceInfo = (): Pick<DataSyncDeviceInfo, 'deviceId' | 'deviceName' | 'platform' | 'version'> => ({
   deviceId: getLocalDeviceId(),
@@ -511,7 +511,7 @@ const startServer = async() => {
       }
       if (requestUrl.pathname === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
-        res.end('Sollin Data Sync Service')
+        res.end('ZJ-Music Data Sync Service')
         return
       }
 
@@ -525,7 +525,7 @@ const startServer = async() => {
       const requestUrl = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
       const code = requestUrl.searchParams.get('code') || ''
       const deviceId = requestUrl.searchParams.get('deviceId') || `device-${randomBytes(4).toString('hex')}`
-      const deviceName = requestUrl.searchParams.get('deviceName') || 'Sollin'
+      const deviceName = requestUrl.searchParams.get('deviceName') || 'ZJ-Music'
       const version = requestUrl.searchParams.get('version') || app.getVersion()
 
       if (code !== config.connectionCode) {

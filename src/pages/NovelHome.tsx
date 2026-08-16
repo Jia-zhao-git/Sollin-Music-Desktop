@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, startTransition } from 'react'
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BookOpen, ChevronLeft, ChevronRight, Clock3, Heart, LibraryBig, Loader2, Plus, Search, SearchX, Sparkles, X } from 'lucide-react'
@@ -6,7 +6,7 @@ import StatusState from '@/components/StatusState'
 import novelApi from '@/services/novelApi'
 import { getDefaultNovelSourceId, getGroupedNovelSources, NOVEL_SOURCE_STORAGE_KEY } from '@/services/novelSources'
 import { useNovelStore } from '@/stores/novelStore'
-import type { LocalBook, NovelListItem, NovelListResult, NovelSourceId } from '@/types/novel'
+import type { LocalBook, NovelDownloadedBook, NovelListItem, NovelListResult, NovelSourceId } from '@/types/novel'
 import { cn } from '@/utils/cn'
 
 const FALLBACK_COVER = 'data:image/svg+xml;utf8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480"%3E%3Cdefs%3E%3ClinearGradient id="g" x1="0" x2="1" y1="0" y2="1"%3E%3Cstop stop-color="%23171310"/%3E%3Cstop offset=".55" stop-color="%23422b17"/%3E%3Cstop offset="1" stop-color="%23080705"/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width="360" height="480" rx="28" fill="url(%23g)"/%3E%3Cpath d="M94 94h132a40 40 0 0 1 40 40v252H112a34 34 0 0 1-34-34V110a16 16 0 0 1 16-16z" fill="%23fff" opacity=".12"/%3E%3Cpath d="M116 144h108M116 182h92M116 220h118" stroke="%23fff" stroke-width="12" stroke-linecap="round" opacity=".35"/%3E%3Ctext x="180" y="352" fill="%23ffffff" opacity=".58" font-family="serif" font-size="28" text-anchor="middle"%3ENovel%3C/text%3E%3C/svg%3E'
@@ -101,6 +101,36 @@ function LocalBookCard({ book, onOpen, onRemove }: { book: LocalBook; onOpen: ()
   )
 }
 
+function DownloadedBookCard({ book, onOpen, onRemove }: { book: NovelDownloadedBook; onOpen: () => void; onRemove: () => void }) {
+  return (
+    <div className="group relative shrink-0 w-36 sm:w-40 text-left rounded-2xl overflow-hidden bg-white/75 dark:bg-stone-950/55 border border-black/5 dark:border-white/10 shadow-sm">
+      <button onClick={onOpen} className="block w-full text-left">
+        <div className="relative aspect-[3/4] bg-gradient-to-br from-stone-800 via-amber-900 to-black overflow-hidden">
+          <div className="h-full w-full flex items-center justify-center">
+            <BookOpen className="h-10 w-10 text-white/35" />
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+          <span className="absolute left-2 top-2 rounded-full bg-blue-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">离线</span>
+          <div className="absolute left-2 right-2 bottom-2">
+            <span className="block truncate rounded-full bg-black/55 px-2 py-1 text-[11px] text-white backdrop-blur">全本已下载</span>
+          </div>
+        </div>
+        <div className="p-3">
+          <h3 className="font-semibold text-[var(--text-primary)] line-clamp-2 min-h-[2.7rem]">{book.title}</h3>
+          <p className="mt-1 text-xs text-[var(--text-muted)] truncate">{book.sourceName}</p>
+        </div>
+      </button>
+      <button
+        onClick={onRemove}
+        title="从离线书架移除"
+        className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-red-500 group-hover:opacity-100"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 function SourceSwitcher({ sourceId, onChange }: { sourceId: NovelSourceId; onChange: (sourceId: NovelSourceId) => void }) {
   const groups = useMemo(() => getGroupedNovelSources(), [])
   const active = Object.values(groups).flat().find((source) => source.id === sourceId)
@@ -174,6 +204,20 @@ export default function NovelHome() {
   const localBooks = useNovelStore((state) => state.localBooks)
   const addLocalBooks = useNovelStore((state) => state.addLocalBooks)
   const removeLocalBook = useNovelStore((state) => state.removeLocalBook)
+  // 「下载全书」的离线书（与本地导入并列展示在书架中，之前它只存在于详情页下载后的临时跳转里，没有持久入口）。
+  const [downloadedBooks, setDownloadedBooks] = useState<NovelDownloadedBook[]>([])
+  const removeDownloadedBook = useCallback(async (bookId: string) => {
+    try {
+      await novelApi.removeDownloadedBook(bookId)
+    } catch {
+      // 忽略存储错误，仍清理本地列表
+    }
+    setDownloadedBooks((prev) => prev.filter((book) => book.id !== bookId))
+  }, [])
+
+  useEffect(() => {
+    novelApi.listDownloadedBooks().then(setDownloadedBooks).catch(() => {})
+  }, [])
 
   const handleImportLocal = async () => {
     try {
@@ -304,7 +348,7 @@ export default function NovelHome() {
               <div className="flex items-center gap-2">
                 <LibraryBig className="h-5 w-5 text-amber-500" />
                 <h2 className="text-xl font-black text-[var(--text-primary)]">本地书架</h2>
-                <span className="text-sm text-[var(--text-muted)]">导入的 TXT 文件</span>
+                <span className="text-sm text-[var(--text-muted)]">导入的 TXT 与离线下载</span>
               </div>
               <button
                 onClick={handleImportLocal}
@@ -313,13 +357,13 @@ export default function NovelHome() {
                 <Plus className="h-4 w-4" /> 导入 TXT
               </button>
             </div>
-            {localBooks.length === 0 ? (
+            {localBooks.length === 0 && downloadedBooks.length === 0 ? (
               <button
                 onClick={handleImportLocal}
                 className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-black/10 dark:border-white/10 py-10 text-[var(--text-muted)] transition-colors hover:border-amber-400 hover:text-amber-500"
               >
                 <Plus className="h-7 w-7" />
-                <span className="text-sm">导入本地 TXT 小说，离线也能读</span>
+                <span className="text-sm">导入本地 TXT 小说，或到详情页「下载全书」离线阅读</span>
               </button>
             ) : (
               <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
@@ -330,6 +374,16 @@ export default function NovelHome() {
                     onOpen={() => navigate(`/novel/${book.id}/chapter/${book.chapters[0]?.id || 'ch-1'}`)}
                     onRemove={() => {
                       if (window.confirm(`从本地书架移除「${book.name}」？\n（仅移除书架记录，不会删除原文件）`)) removeLocalBook(book.id)
+                    }}
+                  />
+                ))}
+                {downloadedBooks.map((book) => (
+                  <DownloadedBookCard
+                    key={book.id}
+                    book={book}
+                    onOpen={() => navigate(`/novel/${book.id}/chapter/__downloaded__`)}
+                    onRemove={() => {
+                      if (window.confirm(`从离线书架移除「${book.title}」？\n（仅移除记录，需要时可在详情页重新下载）`)) removeDownloadedBook(book.id)
                     }}
                   />
                 ))}

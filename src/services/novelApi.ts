@@ -7,6 +7,11 @@ const CACHE_TTL = 5 * 60 * 1000
 const RESPONSE_CACHE = new Map<string, { expiresAt: number; value: unknown }>()
 const INFLIGHT = new Map<string, Promise<unknown>>()
 
+// 章节正文缓存：滚动模式预载/翻章会反复请求同一章，网络正文体积大且书源不稳定，
+// 故在会话内做永久缓存（按 书源:书id:章id 索引），并对并发请求做去重，避免重复打网络。
+const CHAPTER_CACHE = new Map<string, NovelReaderResult>()
+const CHAPTER_INFLIGHT = new Map<string, Promise<NovelReaderResult>>()
+
 const getCached = async <T,>(key: string, loader: () => Promise<T>, ttl = CACHE_TTL): Promise<T> => {
   const now = Date.now()
   const cached = RESPONSE_CACHE.get(key)
@@ -1060,28 +1065,31 @@ export const novelApi = {
     }
     const source = getNovelSource(sourceId || (bookId.includes(':') ? bookId.split(':')[0] as NovelSourceId : undefined))
     const rawBookId = bookId.includes(':') ? bookId.split(':').slice(1).join(':') : bookId
-    if (source.id === 'qimao') {
-      return fetchQimaoChapter(rawBookId, chapterId)
+    // 命中章节缓存直接返回，避免滚动预载/翻章反复打网络（会话内永久缓存）。
+    const cacheKey = `chapter:${source.id}:${rawBookId}:${chapterId}`
+    const cached = CHAPTER_CACHE.get(cacheKey)
+    if (cached) return cached
+    const inflight = CHAPTER_INFLIGHT.get(cacheKey)
+    if (inflight) return inflight
+    const promise = (async () => {
+      let result: NovelReaderResult
+      if (source.id === 'qimao') result = await fetchQimaoChapter(rawBookId, chapterId)
+      else if (source.id === 'kuwo') result = await fetchKuwoChapter(rawBookId, chapterId)
+      else if (source.id === 'sto66') result = await fetchStoChapter(rawBookId, chapterId)
+      else if (source.id === 'youshu95590') result = await fetchYoushuChapter(rawBookId, chapterId)
+      else if (source.id === 'shuhuangw') result = await fetchShuhuangChapter(rawBookId, chapterId)
+      else if (source.id === 'shu52') result = await fetchShu52Chapter(rawBookId, chapterId)
+      else if (source.id === 'jiujiu9191') result = await fetchJiujiuChapter(rawBookId, chapterId)
+      else result = await fetchBoluoChapter(rawBookId, chapterId)
+      CHAPTER_CACHE.set(cacheKey, result)
+      return result
+    })()
+    CHAPTER_INFLIGHT.set(cacheKey, promise)
+    try {
+      return await promise
+    } finally {
+      CHAPTER_INFLIGHT.delete(cacheKey)
     }
-    if (source.id === 'kuwo') {
-      return fetchKuwoChapter(rawBookId, chapterId)
-    }
-    if (source.id === 'sto66') {
-      return fetchStoChapter(rawBookId, chapterId)
-    }
-    if (source.id === 'youshu95590') {
-      return fetchYoushuChapter(rawBookId, chapterId)
-    }
-    if (source.id === 'shuhuangw') {
-      return fetchShuhuangChapter(rawBookId, chapterId)
-    }
-    if (source.id === 'shu52') {
-      return fetchShu52Chapter(rawBookId, chapterId)
-    }
-    if (source.id === 'jiujiu9191') {
-      return fetchJiujiuChapter(rawBookId, chapterId)
-    }
-    return fetchBoluoChapter(rawBookId, chapterId)
   },
 
   async downloadBook(id: string, sourceId?: NovelSourceId): Promise<NovelDownloadedBook> {
@@ -1137,6 +1145,12 @@ export const novelApi = {
 
   async listDownloadedBooks(): Promise<NovelDownloadedBook[]> {
     return readDownloadedBooks()
+  },
+
+  async removeDownloadedBook(id: string): Promise<void> {
+    const current = await readDownloadedBooks()
+    const next = current.filter((item) => item.id !== id)
+    await writeDownloadedBooks(next)
   },
 }
 

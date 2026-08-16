@@ -1,11 +1,11 @@
-# Sollin｜一款兼容在线和本地的音乐播放客户端
+# ZJ-Music｜一款兼容在线和本地的音乐播放客户端
 
 <p>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square"></a>
-  <a href="https://github.com/Ryderwe/Sollin-Music-Desktop/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Ryderwe/Sollin-Music-Desktop?style=flat-square"></a>
-  <a href="https://github.com/Ryderwe/Sollin-Music-Desktop/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/Ryderwe/Sollin-Music-Desktop?include_prereleases&style=flat-square"></a>
-  <a href="https://github.com/Ryderwe/Sollin-Music-Desktop/releases"><img alt="Total release downloads" src="https://img.shields.io/github/downloads/Ryderwe/Sollin-Music-Desktop/total?style=flat-square&label=Total%20Release%20Downloads&color=F08AA8"></a>
-  <img alt="Repository views" src="https://visitor-badge.laobi.icu/badge?page_id=Ryderwe.Sollin-Music-Desktop&left_text=Repository%20Views&left_color=%235B78FF&right_color=%23F08AA8">
+  <a href="https://github.com/Jia-zhao-git/JiaMusic/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Jia-zhao-git/JiaMusic?style=flat-square"></a>
+  <a href="https://github.com/Jia-zhao-git/JiaMusic/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/Jia-zhao-git/JiaMusic?include_prereleases&style=flat-square"></a>
+  <a href="https://github.com/Jia-zhao-git/JiaMusic/releases"><img alt="Total release downloads" src="https://img.shields.io/github/downloads/Jia-zhao-git/JiaMusic/total?style=flat-square&label=Total%20Release%20Downloads&color=F08AA8"></a>
+  <img alt="Repository views" src="https://visitor-badge.laobi.icu/badge?page_id=Jia-zhao-git.JiaMusic&left_text=Repository%20Views&left_color=%235B78FF&right_color=%23F08AA8">
   <img alt="Electron 28" src="https://img.shields.io/badge/Electron-28-47848F?logo=electron&logoColor=white&style=flat-square">
   <img alt="React 18" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=20232A&style=flat-square">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white&style=flat-square">
@@ -16,9 +16,9 @@
 
 中文 | [English](README.en.md)
 
-Sollin 是一个基于 Electron、React、TypeScript、Vite 和 Tailwind CSS 构建的跨平台桌面音乐播放器。它主要面向本地播放和在线播放：本地播放负责本地曲库、歌单、歌词、下载和备份；在线播放依赖用户自行导入的 LX JS 音源脚本。
+ZJ-Music 是一个基于 Electron、React、TypeScript、Vite 和 Tailwind CSS 构建的跨平台桌面音乐播放器。它主要面向本地播放和在线播放：本地播放负责本地曲库、歌单、歌词、下载和备份；在线播放依赖用户自行导入的 LX JS 音源脚本。
 
-Sollin 桌面端从 `1.3.1` 版本开始开源。本开源版本不包含私有后端账号、激活、服务端云备份等功能，也不包含私有音源脚本或私有音乐 API。公告可选使用公开 GitHub Issue 评论获取，不依赖私有后端。
+ZJ-Music 桌面端从 `1.3.1` 版本开始开源。本开源版本不包含私有后端账号、激活、服务端云备份等功能，也不包含私有音源脚本或私有音乐 API。公告可选使用公开 GitHub Issue 评论获取，不依赖私有后端。
 
 ## 目录
 
@@ -66,12 +66,12 @@ cp .env.example .env.local
 可用变量：
 
 ```env
-VITE_APP_VERSION=1.3.1
+VITE_APP_VERSION=1.0.1
 VITE_DEV_SERVER_PORT=5173
-VITE_GITHUB_REPO=Ryderwe/Sollin-Music-Desktop
-VITE_GITHUB_ANNOUNCEMENT_REPO=Ryderwe/Sollin-Music-Desktop
+VITE_GITHUB_REPO=Jia-zhao-git/JiaMusic
+VITE_GITHUB_ANNOUNCEMENT_REPO=Jia-zhao-git/JiaMusic
 VITE_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER=1
-VITE_GITHUB_ANNOUNCEMENT_AUTHOR=ryderwe
+VITE_GITHUB_ANNOUNCEMENT_AUTHOR=Jia-zhao-git
 ```
 
 配置项说明：
@@ -81,7 +81,7 @@ VITE_GITHUB_ANNOUNCEMENT_AUTHOR=ryderwe
 - `VITE_GITHUB_REPO`：用于检查更新的 GitHub 仓库，格式为 `owner/repo`。
 - `VITE_GITHUB_ANNOUNCEMENT_REPO`：用于读取公告评论的 GitHub 仓库，格式为 `owner/repo`。默认使用 `VITE_GITHUB_REPO`。
 - `VITE_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER`：用于读取公告的 Issue 编号。官方默认使用 `1`，显式留空时关闭公告检查。
-- `VITE_GITHUB_ANNOUNCEMENT_AUTHOR`：只显示该 GitHub 用户发布的评论，默认 `ryderwe`。
+- `VITE_GITHUB_ANNOUNCEMENT_AUTHOR`：只显示该 GitHub 用户发布的评论，默认 `Jia-zhao-git`。
 
 开源版本不需要配置私有服务地址。请不要把 `.env.local`、Token、证书、本机路径或内部接口文档提交到仓库。
 
@@ -265,7 +265,7 @@ git push origin v1.3.1
 使用方式：
 
 1. 在公开仓库中新建一个固定 Issue，例如标题为 `Announcements`。
-2. 只用 `ryderwe` 账号在该 Issue 下发布公告评论。
+2. 只用 `Jia-zhao-git` 账号在该 Issue 下发布公告评论。
 3. 将该 Issue 编号写入 `.env.local` 的 `VITE_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER`。
 
 该功能只请求 GitHub 公共 API，不需要 Token，也不会接入私有后端。
@@ -483,7 +483,7 @@ VITE_DEV_SERVER_PORT=5174 npm run electron:dev
 
 ## 致谢
 
-Sollin 是独立项目，但它受益于以下开源项目的思路和生态：
+ZJ-Music 是独立项目，但它受益于以下开源项目的思路和生态：
 
 - [LX Music Desktop](https://github.com/lyswhut/lx-music-desktop)：桌面音乐播放器行为、本地数据流程、同步概念和 LX 音源脚本生态的重要参考。
 - [Mineradio](https://github.com/XxHuberrr/Mineradio.git)：Mineradio 播放界面视觉引擎、舞台歌词和动效体验的移植来源与重要参考。
@@ -498,10 +498,10 @@ MIT。详见 [LICENSE](LICENSE)。
 
 ## Star History
 
-<a href="https://www.star-history.com/?type=date&repos=Ryderwe%2FSollin-Music-Desktop">
+<a href="https://www.star-history.com/?type=date&repos=Jia-zhao-git%2FJiaMusic">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Ryderwe/Sollin-Music-Desktop&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Ryderwe/Sollin-Music-Desktop&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Ryderwe/Sollin-Music-Desktop&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Jia-zhao-git/JiaMusic&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Jia-zhao-git/JiaMusic&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Jia-zhao-git/JiaMusic&type=date&legend=top-left" />
  </picture>
 </a>

@@ -10,6 +10,7 @@ import Poster from '@/components/ui/Poster'
 import videoApi from '@/services/videoApi'
 import { useVideoStore } from '@/stores/videoStore'
 import { usePlayerStore } from '@/stores/playerStore'
+import { videoDownloadManager } from '@/services/videoDownloadManager'
 import type { VideoCacheItem, VideoDetail, VideoEpisode, VideoListItem } from '@/types/video'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
@@ -35,7 +36,7 @@ const isWatchedProgress = (currentTime?: number, durationSeconds?: number) => {
   return durationSeconds ? currentTime > durationSeconds * 0.1 : false
 }
 
-function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; episode: VideoEpisode; onEnded?: () => void }) {
+export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; episode: VideoEpisode; onEnded?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const lastHistoryAtRef = useRef(0)
@@ -51,6 +52,8 @@ function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; episode:
   const [showControls, setShowControls] = useState(true)
   const [buffering, setBuffering] = useState(false)
   const [resumePrompt, setResumePrompt] = useState<number | null>(null)
+  // 拖拽/点击进度条 seek 期间置 true，屏蔽 timeupdate 把显示进度拉回旧位置（修复「点击进度条会跳、要点一两次才成功」）。
+  const seekingRef = useRef(false)
   const { history, upsertHistory } = useVideoStore()
 
   const historyItem = useMemo(
@@ -120,6 +123,8 @@ function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; episode:
     const onError = () => setError('视频播放失败，请尝试切换播放源或其他集数')
     const handleEnded = () => onEnded?.()
     const onTimeUpdate = () => {
+      // seek 未完成前不覆盖显示进度，否则会跳回旧位置
+      if (seekingRef.current) return
       setCurrentTime(element.currentTime)
       if (element.currentTime < 2) return
       const now = Date.now()
@@ -141,7 +146,12 @@ function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; episode:
     }
     const onWaiting = () => setBuffering(true)
     const onPlaying = () => setBuffering(false)
-    const onSeeked = () => setBuffering(false)
+    const onSeeked = () => {
+      setBuffering(false)
+      // seek 完成：释放屏蔽并把显示进度同步到真实位置，避免停在旧值
+      seekingRef.current = false
+      setCurrentTime(Number.isFinite(element.currentTime) ? element.currentTime : 0)
+    }
 
     element.addEventListener('loadedmetadata', onLoaded)
     element.addEventListener('error', onError)
@@ -180,8 +190,12 @@ function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; episode:
     if (!element) return
     const max = Number.isFinite(element.duration) ? element.duration : 0
     const clamped = Math.max(0, Math.min(time, max > 0 ? max : time))
+    // 进入 seek 状态：屏蔽 timeupdate 覆盖，直到 seeked 或兜底超时
+    seekingRef.current = true
     element.currentTime = clamped
     setCurrentTime(clamped)
+    // 兜底：跳到与当前相同的位置等场景浏览器未必触发 seeked，超时后释放避免进度显示被冻结
+    window.setTimeout(() => { seekingRef.current = false }, 400)
   }, [])
 
   const togglePlay = useCallback(() => {
@@ -467,7 +481,7 @@ export default function VideoDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [related, setRelated] = useState<VideoListItem[]>([])
   const [episodeQuery, setEpisodeQuery] = useState('')
-  const { history, toggleFavorite, isFavorite, setCurrentVideo, setCurrentEpisode, downloads, addDownload, removeDownload, cacheDirectory, setCacheDirectory, scanCache, addWatchLater, removeWatchLater } = useVideoStore()
+  const { history, toggleFavorite, isFavorite, setCurrentVideo, setCurrentEpisode, downloads, activeDownloads, removeDownload, cacheDirectory, setCacheDirectory, scanCache, addWatchLater, removeWatchLater } = useVideoStore()
   const watchLater = useVideoStore((state) => state.watchLater)
   const inWatchLater = watchLater.some((item) => item.id === detail?.id)
 
@@ -641,47 +655,8 @@ export default function VideoDetailPage() {
   }, [activeSourceIndex, detail, selectedEpisode, setCurrentEpisode])
 
   // ---- 离线缓存 / 下载 ----
-  const [activeDownloads, setActiveDownloads] = useState<Record<string, { progress: number; status: 'pending' | 'downloading' | 'completed' | 'failed'; filePath?: string; error?: string }>>({})
-  const pendingRef = useRef<Map<string, { videoName: string; episodeTitle: string; url: string; videoId?: string }>>(new Map())
-  const taskUrlRef = useRef<Map<string, string>>(new Map())
-  const urlTaskRef = useRef<Map<string, string>>(new Map())
-
-  // 与主进程下载进度事件对齐：更新进行中状态，完成时落库到 downloads。
-  useEffect(() => {
-    const api = window.electronAPI
-    if (!api?.onVideoDownloadEvent) return
-    const off = api.onVideoDownloadEvent((payload) => {
-      const url = taskUrlRef.current.get(payload.taskId)
-      if (!url) return
-      if (payload.status === 'completed') {
-        const pending = pendingRef.current.get(payload.taskId)
-        if (pending && payload.filePath) {
-          addDownload({
-            id: `cache::${url}`,
-            videoName: pending.videoName,
-            episodeTitle: pending.episodeTitle,
-            url: pending.url,
-            filePath: payload.filePath,
-            status: 'completed',
-            downloadedAt: Date.now(),
-            videoId: pending.videoId,
-          })
-        }
-        pendingRef.current.delete(payload.taskId)
-        taskUrlRef.current.delete(payload.taskId)
-        urlTaskRef.current.delete(url)
-        setActiveDownloads((prev) => ({ ...prev, [url]: { progress: 100, status: 'completed', filePath: payload.filePath } }))
-      } else if (payload.status === 'failed') {
-        pendingRef.current.delete(payload.taskId)
-        taskUrlRef.current.delete(payload.taskId)
-        urlTaskRef.current.delete(url)
-        setActiveDownloads((prev) => ({ ...prev, [url]: { progress: 0, status: 'failed', error: payload.error } }))
-      } else {
-        setActiveDownloads((prev) => ({ ...prev, [url]: { progress: payload.progress, status: payload.status } }))
-      }
-    })
-    return () => { off?.() }
-  }, [addDownload])
+  // 进行中的缓存状态统一走全局 videoStore.activeDownloads（由 videoDownloadManager 在应用级监听主进程事件写入），
+  // 因此切换页面不会导致进度/完成事件丢失：即便离开本页，主进程仍在下载，回来后进度与「已缓存」状态都正确。
 
   // 启动时把缓存目录同步为真实生效路径（主进程默认值或用户设置）。
   useEffect(() => {
@@ -691,21 +666,8 @@ export default function VideoDetailPage() {
   }, [setCacheDirectory])
 
   const startDownload = useCallback(async (episode: VideoEpisode) => {
-    const api = window.electronAPI
-    if (!api?.startVideoDownload || !detail) return
-    const taskId = `dl_${Math.random().toString(36).slice(2, 10)}`
-    pendingRef.current.set(taskId, { videoName: detail.name, episodeTitle: episode.title, url: episode.url, videoId: detail.id })
-    taskUrlRef.current.set(taskId, episode.url)
-    urlTaskRef.current.set(episode.url, taskId)
-    setActiveDownloads((prev) => ({ ...prev, [episode.url]: { progress: 0, status: 'pending' } }))
-    try {
-      await api.startVideoDownload({ taskId, videoName: detail.name, episodeTitle: episode.title, url: episode.url, targetDirectory: cacheDirectory || undefined })
-    } catch (err) {
-      pendingRef.current.delete(taskId)
-      taskUrlRef.current.delete(taskId)
-      urlTaskRef.current.delete(episode.url)
-      setActiveDownloads((prev) => ({ ...prev, [episode.url]: { progress: 0, status: 'failed', error: err instanceof Error ? err.message : '下载失败' } }))
-    }
+    if (!detail) return
+    await videoDownloadManager.startDownload(detail, episode, cacheDirectory || undefined)
   }, [cacheDirectory, detail])
 
   const cachedByUrl = useMemo(() => {
@@ -773,6 +735,7 @@ export default function VideoDetailPage() {
               return (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-sm font-semibold text-emerald-600 dark:text-emerald-300"><Download className="h-3.5 w-3.5" /> 已缓存</span>
+                  <button onClick={() => handlePlayOffline(cachedItem)} className="inline-flex items-center gap-1 rounded-full bg-blue-500 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-600"><Play className="h-3.5 w-3.5" /> 播放</button>
                   <button onClick={() => window.electronAPI?.openVideoCacheItem(cachedItem.filePath)} className="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10"><FolderOpen className="h-3.5 w-3.5" /> 打开</button>
                   <button onClick={() => window.electronAPI?.showVideoCacheItemInFolder(cachedItem.filePath)} className="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">打开所在文件夹</button>
                   <button onClick={() => handleDeleteCache(cachedItem)} className="inline-flex items-center gap-1 rounded-full border border-red-500/20 px-3 py-1 text-sm text-red-500 hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" /> 删除</button>
@@ -780,16 +743,13 @@ export default function VideoDetailPage() {
               )
             }
             if (dl && (dl.status === 'downloading' || dl.status === 'pending')) {
-              const taskId = urlTaskRef.current.get(url)
               return (
                 <div className="flex flex-1 items-center gap-3 min-w-[220px]">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
                     <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${dl.progress}%` }} />
                   </div>
                   <span className="text-sm tabular-nums text-[var(--text-muted)]">{dl.progress}%</span>
-                  {taskId && (
-                    <button onClick={() => window.electronAPI?.cancelVideoDownload(taskId)} className="rounded-full border border-black/10 px-3 py-1 text-sm hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">取消</button>
-                  )}
+                  <button onClick={() => videoDownloadManager.cancelDownload(url)} className="rounded-full border border-black/10 px-3 py-1 text-sm hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10">取消</button>
                 </div>
               )
             }

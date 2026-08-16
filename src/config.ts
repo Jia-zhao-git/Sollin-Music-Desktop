@@ -1,6 +1,6 @@
 // 应用配置
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.3.7'
-export const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO || 'Ryderwe/Sollin-Music-Desktop'
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.1'
+export const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO || 'Jia-zhao-git/JiaMusic'
 const DEFAULT_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER = '1'
 
 const parsePositiveInteger = (value?: string): number | null => {
@@ -14,4 +14,4 @@ export const GITHUB_ANNOUNCEMENT_REPO = import.meta.env.VITE_GITHUB_ANNOUNCEMENT
 export const GITHUB_ANNOUNCEMENT_ISSUE_NUMBER = parsePositiveInteger(
   import.meta.env.VITE_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER ?? DEFAULT_GITHUB_ANNOUNCEMENT_ISSUE_NUMBER,
 )
-export const GITHUB_ANNOUNCEMENT_AUTHOR = import.meta.env.VITE_GITHUB_ANNOUNCEMENT_AUTHOR || 'ryderwe'
+export const GITHUB_ANNOUNCEMENT_AUTHOR = import.meta.env.VITE_GITHUB_ANNOUNCEMENT_AUTHOR || 'Jia-zhao-git'

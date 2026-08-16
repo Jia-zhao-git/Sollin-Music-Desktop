@@ -6,7 +6,7 @@ import { ArrowLeft, Bookmark, BookmarkPlus, Check, ChevronLeft, ChevronRight, Cl
 import StatusState from '@/components/StatusState'
 import ReadStateBadge from '@/components/ReadStateBadge'
 import novelApi from '@/services/novelApi'
-import type { LocalBook, NovelDetail, NovelChapter, NovelListItem, NovelSourceId } from '@/types/novel'
+import type { LocalBook, NovelDetail, NovelChapter, NovelDownloadedBook, NovelListItem, NovelSourceId } from '@/types/novel'
 import { useNovelStore } from '@/stores/novelStore'
 import { cn } from '@/utils/cn'
 
@@ -23,6 +23,12 @@ const AUTO_CONTINUE_PAGED_INTERVAL = 5000
 const AUTO_SCROLL_TICK_MS = 50             // 自动下滚每帧间隔（ms）
 const AUTO_SCROLL_VIEWPORT_RATIO = 0.005   // 每帧下滚距离 = 视口高度 × 该比例
 const AUTO_SCROLL_RESUME_MS = 1200         // 用户手动滚动后，自动下滚暂停时长（ms）
+
+// 连续滚动模式：拼接多章渲染，远离「单章到底就要翻页」。
+// 进入某章时预载其前后的缓冲章，滚动到顶/底时渐进加载相邻章并做滚动锚定，实现无缝连读。
+const SCROLL_BUFFER_BEFORE = 1             // 当前章之前预载的章节数
+const SCROLL_PREFETCH_AHEAD = 3            // 当前章之后预载/预取的章节数
+const SCROLL_PREFETCH_PX = 600             // 距顶/底多少像素内触发相邻章加载
 
 type ReaderMode = 'paged' | 'scroll'
 
@@ -109,6 +115,20 @@ const localBookToDetail = (book: LocalBook): NovelDetail => {
   return { ...listItem, chapters }
 }
 
+// 把「整本下载」的书（NovelDownloadedBook）合成为单章详情，离线即可阅读（无需请求在线详情）。
+// 正文为整本拼合内容（含「## 章节标题」标记），翻页模式会自动分页、滚动模式整本连读。
+const downloadedToDetail = (book: NovelDownloadedBook): NovelDetail => {
+  const chapters: NovelChapter[] = [{ id: '__downloaded__', title: book.title }]
+  const listItem: NovelListItem = {
+    id: book.id,
+    rawId: book.id,
+    sourceId: (book.id.split(':')[0] as NovelSourceId) || 'local',
+    sourceName: book.sourceName,
+    name: book.title,
+  }
+  return { ...listItem, chapters }
+}
+
 export default function NovelReaderPage() {
   const { id, chapterId } = useParams<{ id: string; chapterId: string }>()
   const navigate = useNavigate()
@@ -164,6 +184,69 @@ export default function NovelReaderPage() {
   // 续读位置写入防抖计时器；滚动模式滚动 / 分页模式翻页时高频触发，统一 600ms 防抖落库。
   const saveTimerRef = useRef<number | null>(null)
 
+  // ---- 连续滚动模式：多章拼接 + 渐进加载 ----
+  // loadedChapters 是当前已渲染到 DOM 的连续章节内容（有序）；loadedStart/loadedEnd 为其在 detail.chapters 中的下标（仅用 ref 持有，避免无效重渲染）。
+  const [loadedChapters, setLoadedChapters] = useState<{ id: string; title: string; content: string }[]>([])
+  // 当前视口顶部所属章节（用于头部标题、「继续阅读」记录、书签位置），用 ref 避免滚动回调读到过期值。
+  const [activeChapterId, setActiveChapterId] = useState<string>(chapterId || '')
+  const activeChapterIdRef = useRef<string>(chapterId || '')
+  const loadedStartRef = useRef(0)
+  const loadedEndRef = useRef(0)
+  // 仅更新 ref（避免无效重渲染）；渲染变化由 setLoadedChapters 驱动。
+  const setLoadedStartSafe = useCallback((value: number) => { loadedStartRef.current = value }, [])
+  const setLoadedEndSafe = useCallback((value: number) => { loadedEndRef.current = value }, [])
+  // 每章渲染区块的 DOM 引用，用于计算「当前读到哪一章」及章内滚动比例。
+  const sectionRefs = useRef<Map<string, HTMLElement>>(new Map())
+
+  // 取指定章节在某章渲染区块内的滚动比例（0-1），用于书签/续读在连续滚动模式下记录章内精确位置。
+  const getSectionScrollRatio = useCallback((targetChapterId: string): number => {
+    const el = getScrollContainer()
+    if (!el) return 0
+    const node = sectionRefs.current.get(targetChapterId)
+    if (!node) return getScrollRatio()
+    const cRect = el.getBoundingClientRect()
+    const topWithin = node.getBoundingClientRect().top - cRect.top + el.scrollTop
+    const height = node.getBoundingClientRect().height
+    if (height <= el.clientHeight) return 0
+    return clampNumber((el.scrollTop - topWithin) / (height - el.clientHeight), 0, 1, 0)
+  }, [])
+
+  // 滚动定位到某章区块内的指定比例（书签跳转用）。
+  const scrollToSectionRatio = useCallback((targetChapterId: string, ratio: number) => {
+    const el = getScrollContainer()
+    if (!el) return
+    const node = sectionRefs.current.get(targetChapterId)
+    if (!node) return
+    const cRect = el.getBoundingClientRect()
+    const topWithin = node.getBoundingClientRect().top - cRect.top + el.scrollTop
+    const height = node.getBoundingClientRect().height
+    const target = topWithin + ratio * Math.max(0, height - el.clientHeight)
+    el.scrollTo({ top: target, behavior: 'smooth' })
+  }, [])
+
+  // 根据滚动位置判断视口顶部当前属于哪一章，更新 activeChapterId 并写入「继续阅读」历史。
+  const updateActiveChapter = useCallback((el: HTMLElement) => {
+    if (!loadedChapters.length || !detail) return
+    const cRect = el.getBoundingClientRect()
+    let activeId = loadedChapters[0].id
+    for (const chapter of loadedChapters) {
+      const node = sectionRefs.current.get(chapter.id)
+      if (!node) continue
+      const topWithin = node.getBoundingClientRect().top - cRect.top + el.scrollTop
+      if (el.scrollTop + 100 >= topWithin) activeId = chapter.id
+      else break
+    }
+    if (activeId !== activeChapterIdRef.current) {
+      activeChapterIdRef.current = activeId
+      setActiveChapterId(activeId)
+      const meta = detail.chapters.find((item) => item.id === activeId)
+      if (meta) {
+        setTitle(meta.title)
+        upsertHistory({ novel: detail, chapter: { id: meta.id, title: meta.title }, readAt: Date.now() })
+      }
+    }
+  }, [detail, loadedChapters, setTitle, upsertHistory])
+
   const loadChapter = useCallback(() => {
     if (!id || !chapterId) return
     const token = loadTokenRef.current + 1
@@ -172,6 +255,36 @@ export default function NovelReaderPage() {
     setLoading(true)
     setError(null)
     let loadedDetail: NovelDetail | null = null
+
+    // 整本下载版：不依赖在线详情，直接读本地已下载内容，离线也能打开（「下载全书」书在书架的入口即走此路径）。
+    if (chapterId === '__downloaded__') {
+      novelApi.getDownloadedBook(id)
+        .then((downloaded) => {
+          if (cancelled()) return
+          if (!downloaded) {
+            setError('未找到已下载的小说，可能已被移除。可在「小说库 › 本地书架」重新下载。')
+            setLoading(false)
+            return
+          }
+          const built = downloadedToDetail(downloaded)
+          setDetail(built)
+          setTitle(downloaded.title)
+          if (!pendingJump) {
+            const saved = getReadingPosition(built.id, '__downloaded__')
+            if (saved) pendingJump = { readerPage: saved.readerPage, scrollRatio: saved.scrollRatio }
+          }
+          setContent(downloaded.content)
+          setReaderPage(1)
+          upsertHistory({ novel: built, chapter: { id: '__downloaded__', title: downloaded.title }, readAt: Date.now() })
+          setLoading(false)
+        })
+        .catch((err) => {
+          console.error('Load downloaded novel failed:', err)
+          if (!cancelled()) setError(err instanceof Error ? err.message : '加载已下载小说失败')
+          setLoading(false)
+        })
+      return
+    }
 
     // 本地导入书籍：不经过在线 API，直接从本地书架取内容并合成详情。
     if (id.startsWith('local:')) {
@@ -239,6 +352,65 @@ export default function NovelReaderPage() {
       })
   }, [chapterId, getReadingPosition, id, setCurrentNovel, upsertHistory])
 
+  // 取单章正文（本地书源直接读本地书架，在线书源走 novelApi），供连续滚动模式拼接多章复用。
+  const fetchChapterContent = useCallback(async (targetChapterId: string): Promise<{ id: string; title: string; content: string } | null> => {
+    if (!detail) return null
+    if (detail.id.startsWith('local:')) {
+      const book = useNovelStore.getState().getLocalBook(detail.id)
+      const ch = book?.chapters.find((item) => item.id === targetChapterId)
+      if (!ch) return null
+      return { id: ch.id, title: ch.title, content: ch.content ?? '' }
+    }
+    const chapter = await novelApi.getChapter(detail.id, targetChapterId, detail.sourceId)
+    return { id: chapter.chapterId, title: chapter.title, content: chapter.content }
+  }, [detail])
+
+  // 连续滚动模式：根据当前章构建「前缓冲 + 当前 + 后预载」的拼接窗口；滚动到顶/底时由滚动回调渐进补充相邻章。
+  useEffect(() => {
+    if (mode !== 'scroll' || !detail || !content || !chapterId) return
+    const chaptersList = detail.chapters
+    const total = chaptersList.length
+    const idx = chaptersList.findIndex((item) => item.id === chapterId)
+    if (idx < 0) return
+    const start = Math.max(0, idx - SCROLL_BUFFER_BEFORE)
+    const end = Math.min(total - 1, idx + SCROLL_PREFETCH_AHEAD)
+    let cancelled = false
+    const build = async () => {
+      const arr: { id: string; title: string; content: string }[] = []
+      for (let i = start; i <= end; i++) {
+        if (cancelled) return
+        const meta = chaptersList[i]
+        if (i === idx) {
+          arr.push({ id: meta.id, title: meta.title, content })
+        } else {
+          const fetched = await fetchChapterContent(meta.id)
+          if (cancelled) return
+          arr.push(fetched ?? { id: meta.id, title: meta.title, content: '' })
+        }
+      }
+      if (cancelled) return
+      setLoadedChapters(arr)
+      setLoadedStartSafe(start)
+      setLoadedEndSafe(end)
+      activeChapterIdRef.current = chaptersList[idx].id
+      setActiveChapterId(chaptersList[idx].id)
+      setTitle(chaptersList[idx].title)
+      requestAnimationFrame(() => {
+        const el = getScrollContainer()
+        if (!el) return
+        const jump = pendingJump
+        pendingJump = null
+        if (jump && jump.scrollRatio != null) {
+          scrollToSectionRatio(chaptersList[idx].id, jump.scrollRatio)
+        } else {
+          el.scrollTo({ top: 0 })
+        }
+      })
+    }
+    build()
+    return () => { cancelled = true }
+  }, [mode, detail, chapterId, content, fetchChapterContent, setLoadedStartSafe, setLoadedEndSafe, scrollToSectionRatio, setTitle])
+
   useEffect(() => {
     loadChapter()
     // 卸载或换章时作废进行中的请求。
@@ -284,43 +456,55 @@ export default function NovelReaderPage() {
   const prevChapter = currentIndex > 0 ? chapters[currentIndex - 1] : null
   const nextChapter = currentIndex >= 0 && currentIndex < chapters.length - 1 ? chapters[currentIndex + 1] : null
   const normalizedContent = content || '暂无内容'
-  const pages = useMemo(() => {
-    const nextPages: string[] = []
-    const paragraphs = normalizedContent.split(/\n{2,}/)
+  // 分页：兼容两种正文格式——空行分段（\n\n）与单行换行（\n，多数网页书源）。
+  // 早期实现仅按 \n{2,} 切分，导致单行换行的整章被当成一个段落、全部挤进一页、翻页失效。
+  // 这里按 \n+ 拆分为段落后再逐页拼装；单个段落超长时按字数硬切到下一页（避免一页撑爆）。
+  const buildPages = (rawText: string): string[] => {
+    const text = (rawText || '').trim()
+    if (!text) return ['暂无内容']
+    const paragraphs = text.split(/\n+/).map((paragraph) => paragraph.trim()).filter(Boolean)
+    const pages: string[] = []
     let current = ''
 
-    for (const paragraph of paragraphs) {
-      const next = current ? `${current}\n\n${paragraph}` : paragraph
-      if (next.length > CHARS_PER_PAGE && current) {
-        nextPages.push(current)
-        current = paragraph
-      } else {
-        current = next
+    const flushIfNeeded = (extra: string) => {
+      if (current && current.length + 2 + extra.length > CHARS_PER_PAGE) {
+        pages.push(current)
+        current = ''
       }
     }
 
-    if (current) nextPages.push(current)
-    if (!nextPages.length) nextPages.push('暂无内容')
-    return nextPages
-  }, [normalizedContent])
+    const appendParagraph = (paragraph: string) => {
+      if (paragraph.length <= CHARS_PER_PAGE) {
+        flushIfNeeded(paragraph)
+        current = current ? `${current}\n\n${paragraph}` : paragraph
+        return
+      }
+      // 超长段落：按字数硬切分页，保证每页不超过上限。
+      let rest = paragraph
+      while (rest.length > 0) {
+        const chunk = rest.slice(0, CHARS_PER_PAGE)
+        rest = rest.slice(CHARS_PER_PAGE)
+        flushIfNeeded(chunk)
+        current = current ? `${current}\n\n${chunk}` : chunk
+      }
+    }
+
+    for (const paragraph of paragraphs) appendParagraph(paragraph)
+    if (current) pages.push(current)
+    return pages.length ? pages : ['暂无内容']
+  }
+  const pages = useMemo(() => buildPages(normalizedContent), [normalizedContent])
   const currentReaderPage = Math.min(readerPage, pages.length)
 
   // 翻页 / 切章后强制回到顶部：依赖 content（切章）与 currentReaderPage（翻页），
   // 作用在真实滚动容器（.app-content-scroll）上，彻底修复「翻页后仍在底部」。
   // 若存在待恢复的书签跳转（跨章重挂载场景），则优先恢复书签位置而非回顶。
+  // 连续滚动模式由上面的 build effect 负责定位（拼接窗口 + 章内比例），此处仅处理分页模式。
   useEffect(() => {
-    if (!content) return
+    if (!content || mode === 'scroll') return
     if (pendingJump) {
       const pending = pendingJump
       pendingJump = null
-      if (mode === 'scroll' && pending.scrollRatio != null) {
-        const apply = () => {
-          const el = getScrollContainer()
-          if (el) el.scrollTop = pending.scrollRatio! * Math.max(0, el.scrollHeight - el.clientHeight)
-        }
-        requestAnimationFrame(apply)
-        return
-      }
       if (pending.readerPage != null) {
         setReaderPage(pending.readerPage)
         const el = getScrollContainer()
@@ -358,10 +542,13 @@ export default function NovelReaderPage() {
     navigate(id ? `/novel/${id}` : '/novel', { replace: true })
   }, [id, navigate])
 
+  // 上一页/章：
+  // - 连续滚动模式：只在容器内上滚一屏（到顶部后由渐进加载补出上一章），绝不触发路由跳转以免重挂载打断连读。
+  // - 分页模式：回退当前章页码，到章首则进入上一章。
   const prevPage = useCallback(() => {
     const scroller = getScrollContainer()
-    if (mode === 'scroll' && scroller && scroller.scrollTop > 120) {
-      scroller.scrollBy({ top: -Math.floor(scroller.clientHeight * 0.86), behavior: 'smooth' })
+    if (mode === 'scroll') {
+      if (scroller) scroller.scrollBy({ top: -Math.floor(scroller.clientHeight * 0.86), behavior: 'smooth' })
       return
     }
     if (currentReaderPage > 1) {
@@ -371,24 +558,15 @@ export default function NovelReaderPage() {
     }
   }, [currentReaderPage, goChapter, mode, prevChapter])
 
+  // 下一页/章：
+  // - 连续滚动模式：只在容器内下滚一屏（到底部后由渐进加载补出下一章并继续滚），绝不触发路由跳转。
+  // - 分页模式：推进当前章页码，到章尾则进入下一章。
   const nextPage = useCallback(() => {
     const scroller = getScrollContainer()
     if (mode === 'scroll') {
-      const nearBottom = scroller
-        ? scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 120
-        : window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 120
-      if (!nearBottom) {
-        const viewportHeight = scroller ? scroller.clientHeight : window.innerHeight
-        if (scroller) scroller.scrollBy({ top: Math.floor(viewportHeight * 0.86), behavior: 'smooth' })
-        else window.scrollBy({ top: Math.floor(viewportHeight * 0.86), behavior: 'smooth' })
-        return
-      }
-      // 到底则进入下一章（滚动模式不分页，直接跳章）。
-      if (nextChapter) goChapter(nextChapter.id)
-      else setAutoContinue(false)
+      if (scroller) scroller.scrollBy({ top: Math.floor(scroller.clientHeight * 0.86), behavior: 'smooth' })
       return
     }
-
     if (currentReaderPage < pages.length) {
       setReaderPage((value) => Math.min(pages.length, value + 1))
     } else if (nextChapter) {
@@ -400,7 +578,7 @@ export default function NovelReaderPage() {
 
   // 自动续读：
   // - 分页模式：按固定节奏自动翻页；用 nextPageRef 持有最新实现，避免每翻一页（currentReaderPage 变化会重建 nextPage）就重置计时器，保证节奏稳定。
-  // - 连续滚动模式：匀速自动下滚（提词器式）；滚到章末自动进入下一章；无下一章则视为读到末尾并自动关闭。
+  // - 连续滚动模式：匀速自动下滚（提词器式）；滚动到拼接内容的底部时渐进加载下一章并继续下滚，直到全书读完；绝不做路由跳转。
   const nextPageRef = useRef<() => void>(() => {})
   useEffect(() => { nextPageRef.current = nextPage }, [nextPage])
 
@@ -410,7 +588,8 @@ export default function NovelReaderPage() {
       const timer = window.setInterval(() => nextPageRef.current(), AUTO_CONTINUE_PAGED_INTERVAL)
       return () => window.clearInterval(timer)
     }
-    if (!nextChapter) {
+    if (!detail) return
+    if (loadedEndRef.current >= detail.chapters.length - 1) {
       setAutoContinue(false)
       return
     }
@@ -421,13 +600,24 @@ export default function NovelReaderPage() {
       const el = getScrollContainer()
       if (!el) return
       if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
-        goChapter(nextChapter.id)
+        // 滚到底：若下一章尚未载入则补载（拼接后滚动高度增大，下个 tick 自然继续下滚）；已到全书末尾则停止自动续读。
+        if (loadedEndRef.current < detail.chapters.length - 1) {
+          const idx = loadedEndRef.current + 1
+          const meta = detail.chapters[idx]
+          fetchChapterContent(meta.id).then((fetched) => {
+            if (!fetched) return
+            setLoadedChapters((prev) => (prev.some((item) => item.id === fetched.id) ? prev : [...prev, fetched]))
+            setLoadedEndSafe(idx)
+          }).catch(() => {})
+        } else {
+          setAutoContinue(false)
+        }
         return
       }
       el.scrollTop += step
     }, AUTO_SCROLL_TICK_MS)
     return () => window.clearInterval(timer)
-  }, [autoContinue, error, goChapter, loading, mode, nextChapter])
+  }, [autoContinue, detail, error, fetchChapterContent, loading, mode, setLoadedEndSafe])
 
   // 键盘快捷键：
   // - → / Space / PageDown：下一页（滚动模式为下滚一屏，到底进下一章）
@@ -531,26 +721,33 @@ export default function NovelReaderPage() {
       })
   }, [bookmarks, detail])
 
-  // 在当前阅读位置插入书签：分页模式记页码，滚动模式记滚动比例；附带正文摘录与（可选）批注。
+  // 在当前阅读位置插入书签：分页模式记页码，连续滚动模式记「当前章 + 章内比例」；附带正文摘录与（可选）批注。
   const addBookmarkAtCurrent = useCallback(() => {
-    if (!detail || !chapterId) return
+    if (!detail) return
     let readerPage: number | undefined
     let scrollRatio: number | undefined
     let snippet = ''
+    let bmChapterId = chapterId
+    let bmChapterTitle = title
     if (mode === 'paged') {
+      if (!chapterId) return
       readerPage = currentReaderPage
       snippet = (pages[currentReaderPage - 1] || '').replace(/\s+/g, ' ').trim().slice(0, 42)
     } else {
-      const ratio = getScrollRatio()
-      scrollRatio = ratio
-      const total = normalizedContent.length
-      const start = Math.floor(ratio * total)
-      snippet = normalizedContent.slice(start, start + 42).replace(/\s+/g, ' ').trim()
+      const cid = activeChapterIdRef.current
+      bmChapterId = cid
+      scrollRatio = getSectionScrollRatio(cid)
+      const activeCh = loadedChapters.find((item) => item.id === cid)
+      const text = activeCh?.content ?? ''
+      const start = Math.floor(scrollRatio * text.length)
+      snippet = text.slice(start, start + 42).replace(/\s+/g, ' ').trim()
+      bmChapterTitle = detail.chapters.find((item) => item.id === cid)?.title ?? title
     }
+    if (!bmChapterId) return
     addBookmark({
       bookId: detail.id,
-      chapterId,
-      chapterTitle: title,
+      chapterId: bmChapterId,
+      chapterTitle: bmChapterTitle,
       readerPage,
       scrollRatio,
       snippet: snippet || undefined,
@@ -558,11 +755,15 @@ export default function NovelReaderPage() {
     })
     setNoteDraft('')
     setShowAddNote(false)
-  }, [addBookmark, chapterId, currentReaderPage, detail, mode, noteDraft, normalizedContent, pages, title])
+  }, [addBookmark, chapterId, currentReaderPage, detail, getSectionScrollRatio, loadedChapters, mode, noteDraft, pages, title])
 
-  // 跳转到书签：同章直接恢复位置（不触发重挂载），跨章则写入模块级 pending 并在新章节渲染后恢复。
+  // 跳转到书签：连续滚动模式下，若目标章已渲染则直接定位到章内比例（不重挂载）；否则写入 pending 后跳章（重挂载后由 build effect 恢复精确位置）。
   const jumpToBookmark = useCallback((bm: { chapterId: string; readerPage?: number; scrollRatio?: number }) => {
     setShowBookmarks(false)
+    if (mode === 'scroll' && sectionRefs.current.has(bm.chapterId)) {
+      scrollToSectionRatio(bm.chapterId, bm.scrollRatio ?? 0)
+      return
+    }
     if (bm.chapterId === chapterId) {
       if (mode === 'scroll') {
         const el = getScrollContainer()
@@ -577,33 +778,81 @@ export default function NovelReaderPage() {
     }
     pendingJump = { readerPage: bm.readerPage, scrollRatio: bm.scrollRatio }
     goChapter(bm.chapterId)
-  }, [chapterId, goChapter, mode])
+  }, [chapterId, goChapter, mode, scrollToSectionRatio])
 
-  // 防抖保存当前章内阅读位置（续读用）：分页模式记页码，滚动模式记滚动比例。
+  // 防抖保存当前章内阅读位置（续读用）：分页模式记页码；连续滚动模式记「当前视口所属章 + 该章内滚动比例」。
   const scheduleSavePosition = useCallback(() => {
-    if (!detail || !chapterId) return
-    const pos = mode === 'paged'
-      ? { readerPage: currentReaderPage }
-      : { scrollRatio: getScrollRatio() }
+    if (!detail) return
+    if (mode === 'paged') {
+      if (!chapterId) return
+      const pos = { readerPage: currentReaderPage }
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = window.setTimeout(() => {
+        saveReadingPosition(detail.id, chapterId, pos)
+      }, 600)
+      return
+    }
+    const cid = activeChapterIdRef.current
+    if (!cid) return
+    const pos = { scrollRatio: getSectionScrollRatio(cid) }
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = window.setTimeout(() => {
-      saveReadingPosition(detail.id, chapterId, pos)
+      saveReadingPosition(detail.id, cid, pos)
     }, 600)
-  }, [chapterId, currentReaderPage, detail, mode, saveReadingPosition])
+  }, [activeChapterId, currentReaderPage, detail, getSectionScrollRatio, mode, saveReadingPosition])
 
   // 续读位置保存：分页模式翻页即记录页码（防抖）。
   useEffect(() => {
     if (mode === 'paged' && detail && chapterId) scheduleSavePosition()
   }, [mode, detail, chapterId, currentReaderPage, scheduleSavePosition])
 
-  // 续读位置保存：滚动模式监听容器 scroll 事件记录比例（防抖）。
+  // 续读位置保存 + 连续滚动渐进加载：滚动模式下监听容器 scroll 事件，
+  // 距底/顶阈值内补载下一章/上一章（拼接进 DOM 并做滚动锚定），同时更新当前章与保存进度。
   useEffect(() => {
-    if (typeof window === 'undefined' || mode !== 'scroll') return
+    if (typeof window === 'undefined' || mode !== 'scroll' || !detail) return
     const target: HTMLElement | Window = getScrollContainer() ?? window
-    const onScroll = () => scheduleSavePosition()
+    const onScroll = () => {
+      const el = getScrollContainer()
+      if (!el) return
+      const scrollHeight = el.scrollHeight
+      const clientHeight = el.clientHeight
+      const scrollTop = el.scrollTop
+
+      // 距底 → 渐进加载下一章并拼接在末尾（自动续读与手动滚动到底都能无缝续上）。
+      if (scrollTop + clientHeight >= scrollHeight - SCROLL_PREFETCH_PX && loadedEndRef.current < detail.chapters.length - 1) {
+        const idx = loadedEndRef.current + 1
+        const meta = detail.chapters[idx]
+        fetchChapterContent(meta.id).then((fetched) => {
+          if (!fetched) return
+          setLoadedChapters((prev) => (prev.some((item) => item.id === fetched.id) ? prev : [...prev, fetched]))
+          setLoadedEndSafe(idx)
+        }).catch(() => {})
+      }
+
+      // 距顶 → 渐进加载上一章并拼接在头部，按高度增量回填 scrollTop 使视口不跳动。
+      if (scrollTop <= SCROLL_PREFETCH_PX && loadedStartRef.current > 0) {
+        const idx = loadedStartRef.current - 1
+        const meta = detail.chapters[idx]
+        const prevHeight = el.scrollHeight
+        const prevTop = el.scrollTop
+        fetchChapterContent(meta.id).then((fetched) => {
+          if (!fetched) return
+          setLoadedChapters((prev) => (prev.some((item) => item.id === fetched.id) ? prev : [fetched, ...prev]))
+          setLoadedStartSafe(idx)
+          requestAnimationFrame(() => {
+            const el2 = getScrollContainer()
+            if (!el2) return
+            el2.scrollTop = prevTop + (el2.scrollHeight - prevHeight)
+          })
+        }).catch(() => {})
+      }
+
+      updateActiveChapter(el)
+      scheduleSavePosition()
+    }
     target.addEventListener('scroll', onScroll, { passive: true })
     return () => target.removeEventListener('scroll', onScroll)
-  }, [mode, scheduleSavePosition])
+  }, [detail, fetchChapterContent, mode, scheduleSavePosition, setLoadedEndSafe, setLoadedStartSafe, updateActiveChapter])
 
   const jumpToChapterNumber = useCallback(() => {
     const value = Number.parseInt(tocJump, 10)
@@ -639,8 +888,9 @@ export default function NovelReaderPage() {
     )
   }
 
-  const canGoPrev = Boolean(prevChapter) || currentReaderPage > 1
-  const canGoNext = Boolean(nextChapter) || currentReaderPage < pages.length || mode === 'scroll'
+  // 连续滚动模式下翻页按钮用于「整屏上/下滚」（无缝连读，无需跳章），故始终可用；分页模式才按页/章判断。
+  const canGoPrev = mode === 'scroll' ? true : (Boolean(prevChapter) || currentReaderPage > 1)
+  const canGoNext = mode === 'scroll' ? true : (Boolean(nextChapter) || currentReaderPage < pages.length)
 
   return (
     <div className="pb-10 max-w-5xl mx-auto">
@@ -653,9 +903,10 @@ export default function NovelReaderPage() {
             <button onClick={() => setShowToc((value) => !value)} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold', showToc ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>
               <List className="h-4 w-4" /> 目录
             </button>
-            <button onClick={() => setMode((value) => value === 'paged' ? 'scroll' : 'paged')} className="rounded-full border border-black/10 px-3 py-1.5 text-sm font-semibold dark:border-white/10">
-              {mode === 'paged' ? '整页阅读' : '连续滚动'}
-            </button>
+            <div className="flex items-center rounded-full border border-black/10 px-1 py-1 text-sm font-semibold dark:border-white/10" title="翻页：按页阅读；滚动：一直向下滑动连续阅读">
+              <button onClick={() => setMode('paged')} className={cn('rounded-full px-3 py-1 transition-colors', mode === 'paged' ? 'bg-amber-500 text-white' : 'text-[var(--text-secondary)] hover:bg-black/5 dark:hover:bg-white/10')}>翻页</button>
+              <button onClick={() => setMode('scroll')} className={cn('rounded-full px-3 py-1 transition-colors', mode === 'scroll' ? 'bg-amber-500 text-white' : 'text-[var(--text-secondary)] hover:bg-black/5 dark:hover:bg-white/10')}>滚动</button>
+            </div>
             <button onClick={() => setAutoContinue((value) => !value)} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold', autoContinue ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>
               {autoContinue ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               自动续读
@@ -709,7 +960,7 @@ export default function NovelReaderPage() {
           <p className="text-sm">{detail.name} · {detail.author || detail.sourceName}</p>
           <h1 className="mt-1 text-2xl font-black" style={{ color: themeStyle.text }}>{title || '正文'}</h1>
           <p className="mt-2 text-xs">
-            第 {currentIndex >= 0 ? currentIndex + 1 : '-'} / {chapters.length || '-'} 章
+            第 {(mode === 'scroll' ? detail.chapters.findIndex((c) => c.id === activeChapterId) : currentIndex) >= 0 ? (mode === 'scroll' ? detail.chapters.findIndex((c) => c.id === activeChapterId) : currentIndex) + 1 : '-'} / {chapters.length || '-'} 章
             {mode === 'paged' ? ` · 第 ${currentReaderPage} / ${pages.length} 页` : ' · 连续滚动'}
             {autoContinue && <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-700 dark:text-amber-300">自动续读中</span>}
           </p>
@@ -718,12 +969,32 @@ export default function NovelReaderPage() {
         <div className="relative">
           {mode === 'paged' && <button aria-label="上一页" onClick={prevPage} disabled={!canGoPrev} className="absolute inset-y-0 left-0 z-10 w-1/5 disabled:pointer-events-none" />}
           {mode === 'paged' && <button aria-label="下一页" onClick={nextPage} disabled={!canGoNext} className="absolute inset-y-0 right-0 z-10 w-1/5 disabled:pointer-events-none" />}
-          <article
-            className={cn('mx-auto min-h-[58vh] px-6 py-8 font-serif sm:px-10', WIDTH_CLASS[contentWidth])}
-            style={{ fontSize, lineHeight, color: themeStyle.text, whiteSpace: 'pre-wrap' }}
-          >
-            {mode === 'paged' ? (pages[currentReaderPage - 1] || '暂无内容') : normalizedContent}
-          </article>
+          {mode === 'paged' ? (
+            <article
+              className={cn('mx-auto min-h-[58vh] px-6 py-8 font-serif sm:px-10', WIDTH_CLASS[contentWidth])}
+              style={{ fontSize, lineHeight, color: themeStyle.text, whiteSpace: 'pre-wrap' }}
+            >
+              {pages[currentReaderPage - 1] || '暂无内容'}
+            </article>
+          ) : (
+            loadedChapters.length === 0 ? (
+              <div className="grid min-h-[58vh] place-items-center"><StatusState variant="loading" /></div>
+            ) : (
+              <div className={cn('mx-auto font-serif', WIDTH_CLASS[contentWidth])}>
+                {loadedChapters.map((chapter) => (
+                  <section
+                    key={chapter.id}
+                    ref={(node) => { if (node) sectionRefs.current.set(chapter.id, node); else sectionRefs.current.delete(chapter.id) }}
+                    className="border-b border-black/5 px-6 py-7 last:border-b-0 dark:border-white/10 sm:px-10"
+                    style={{ fontSize, lineHeight, color: themeStyle.text, whiteSpace: 'pre-wrap' }}
+                  >
+                    <h2 className="mb-4 text-xl font-black" style={{ color: themeStyle.text }}>{chapter.title}</h2>
+                    {chapter.content ? chapter.content : <span className="text-[var(--text-muted)]">（本章加载中…）</span>}
+                  </section>
+                ))}
+              </div>
+            )
+          )}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/5 px-6 py-5 dark:border-white/10">
