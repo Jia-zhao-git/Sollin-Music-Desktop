@@ -2,7 +2,7 @@
 
 <p>
 
-Blog: [月明星稀](https://www.ymxx.net)
+
 
 [中文](README.md) | English
   <a href="https://github.com/Jia-zhao-git/JiaMusic/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/Jia-zhao-git/JiaMusic?include_prereleases&style=flat-square"></a>
