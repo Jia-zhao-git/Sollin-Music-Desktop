@@ -61,6 +61,11 @@ const buildIssueUrl = (owner: string, repo: string, issueNumber: number) => {
   return `https://api.github.com/repos/${safeOwner}/${safeRepo}/issues/${issueNumber}`
 }
 
+const isGithubRateLimited = (response: Response) => (
+  response.status === 403
+  && response.headers.get('X-RateLimit-Remaining') === '0'
+)
+
 const fetchIssue = async(owner: string, repo: string, issueNumber: number) => {
   const response = await fetch(buildIssueUrl(owner, repo, issueNumber), {
     headers: {
@@ -68,7 +73,12 @@ const fetchIssue = async(owner: string, repo: string, issueNumber: number) => {
     },
   })
 
-  if (!response.ok) return null
+  if (!response.ok) {
+    if (isGithubRateLimited(response)) {
+      console.debug('GitHub 公告 issue 获取跳过：API rate limit exceeded')
+    }
+    return null
+  }
 
   const issue = await response.json() as {
     id?: number
@@ -89,6 +99,10 @@ const fetchCommentPage = async(owner: string, repo: string, issueNumber: number,
   })
 
   if (!response.ok) {
+    if (isGithubRateLimited(response)) {
+      console.debug('GitHub 公告获取跳过：API rate limit exceeded')
+      return { comments: [], lastPage: 1 }
+    }
     throw new Error(`GitHub 公告获取失败：${response.status}`)
   }
 

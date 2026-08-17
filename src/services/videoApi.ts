@@ -79,6 +79,9 @@ const parseEpisodeGroups = (playFrom?: string, playUrl?: string) => {
       .split('#')
       .map((entry): VideoEpisode | null => {
         const separatorIndex = entry.indexOf('$')
+        if (separatorIndex < 0 && /^https?:\/\//i.test(entry.trim())) {
+          return { title: '播放', url: entry.trim(), source, sourceIndex }
+        }
         if (separatorIndex <= 0) return null
         const title = entry.slice(0, separatorIndex).trim()
         const url = entry.slice(separatorIndex + 1).trim()

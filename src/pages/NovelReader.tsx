@@ -30,6 +30,8 @@ const SCROLL_BUFFER_BEFORE = 1             // 当前章之前预载的章节数
 const SCROLL_PREFETCH_AHEAD = 3            // 当前章之后预载/预取的章节数
 const SCROLL_PREFETCH_PX = 600             // 距顶/底多少像素内触发相邻章加载
 
+const routePart = (value: string) => encodeURIComponent(value)
+
 type ReaderMode = 'paged' | 'scroll'
 
 const READER_THEMES = {
@@ -535,12 +537,12 @@ export default function NovelReaderPage() {
   const goChapter = useCallback((chapterIdValue: string) => {
     if (!detail) return
     setShowToc(false)
-    navigate(`/novel/${detail.id}/chapter/${chapterIdValue}`, { replace: true })
+    navigate(`/novel/${routePart(detail.id)}/chapter/${routePart(chapterIdValue)}`, { replace: true })
   }, [detail, navigate])
 
   const goBackToDetail = useCallback(() => {
-    navigate(id ? `/novel/${id}` : '/novel', { replace: true })
-  }, [id, navigate])
+    navigate(detail?.id ? `/novel/${routePart(detail.id)}` : id ? `/novel/${routePart(id)}` : '/novel', { replace: true })
+  }, [detail, id, navigate])
 
   // 上一页/章：
   // - 连续滚动模式：只在容器内上滚一屏（到顶部后由渐进加载补出上一章），绝不触发路由跳转以免重挂载打断连读。

@@ -1,4 +1,4 @@
-export type NovelSourceId = 'qimao' | 'kuwo' | 'jiujiu9191' | 'boluomao' | 'sto66' | 'youshu95590' | 'shuhuangw' | 'shu52' | 'local'
+export type NovelSourceId = 'qimao' | 'kuwo' | 'suixkan' | 'aitbooks' | 'txtdd' | 'sudugu' | 'shukuge' | 'jiujiu9191' | 'boluomao' | 'sto66' | 'youshu95590' | 'shuhuangw' | 'shu52' | 'local'
 
 export type NovelSource = {
   id: NovelSourceId

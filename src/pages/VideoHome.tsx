@@ -5,7 +5,7 @@ import { ChevronRight, Clock3, Download, Filter, FolderOpen, Heart, LayoutGrid, 
 import Poster from '@/components/ui/Poster'
 import StatusState from '@/components/StatusState'
 import videoApi from '@/services/videoApi'
-import { getDefaultVideoSourceId, getGroupedVideoSources, VIDEO_SOURCE_STORAGE_KEY } from '@/services/videoSources'
+import { getDefaultVideoSourceId, getGroupedVideoSources, VIDEO_SOURCES, VIDEO_SOURCE_STORAGE_KEY } from '@/services/videoSources'
 import { useVideoStore } from '@/stores/videoStore'
 import type { VideoCacheItem, VideoCategory, VideoListItem, VideoListResult } from '@/types/video'
 import { cn } from '@/utils/cn'
@@ -201,11 +201,51 @@ function OfflineSection({
 }
 
 function SourceSwitcher({ sourceId, onChange }: { sourceId: string; onChange: (sourceId: string) => void }) {
-  const groups = useMemo(() => getGroupedVideoSources(), [])
+  const [hiddenUnlocked, setHiddenUnlocked] = useState(false)
+  const [ffzyClickCount, setFfzyClickCount] = useState(0)
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
+  const [password, setPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const groups = useMemo(() => getGroupedVideoSources(hiddenUnlocked), [hiddenUnlocked])
   const active = Object.values(groups).flat().find((source) => source.id === sourceId)
 
+  const openPasswordDialog = () => {
+    setPassword('')
+    setPasswordError('')
+    setShowPasswordDialog(true)
+  }
+
+  const handlePasswordSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    if (password === '112212') {
+      setHiddenUnlocked(true)
+      setShowPasswordDialog(false)
+      setPassword('')
+      setPasswordError('')
+      return
+    }
+    setHiddenUnlocked(false)
+    setPasswordError('密码错误')
+    setPassword('')
+  }
+
+  const handleSourceClick = (nextSourceId: string) => {
+    if (nextSourceId === 'ffzy' && !hiddenUnlocked) {
+      const nextCount = ffzyClickCount + 1
+      setFfzyClickCount(nextCount)
+      if (nextCount >= 5) {
+        setFfzyClickCount(0)
+        openPasswordDialog()
+      }
+    } else if (nextSourceId !== 'ffzy' && ffzyClickCount > 0) {
+      setFfzyClickCount(0)
+    }
+    onChange(nextSourceId)
+  }
+
   return (
-    <details className="group mt-4 max-w-5xl rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur">
+    <>
+      <details className="group mt-4 max-w-5xl rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm text-white/75">
         <span>当前资源：<b className="text-white">{active?.name || '默认资源'}</b></span>
         <span className="rounded-full bg-white/10 px-3 py-1 group-open:bg-white group-open:text-slate-950">切换资源</span>
@@ -219,7 +259,7 @@ function SourceSwitcher({ sourceId, onChange }: { sourceId: string; onChange: (s
                 <button
                   key={source.id}
                   type="button"
-                  onClick={() => onChange(source.id)}
+                  onClick={() => handleSourceClick(source.id)}
                   className={cn(
                     'rounded-full px-3 py-1.5 text-sm font-semibold transition-all',
                     sourceId === source.id
@@ -235,7 +275,47 @@ function SourceSwitcher({ sourceId, onChange }: { sourceId: string; onChange: (s
           </div>
         ))}
       </div>
-    </details>
+      </details>
+
+      {showPasswordDialog && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm" onClick={() => setShowPasswordDialog(false)}>
+          <form
+            onSubmit={handlePasswordSubmit}
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-white p-5 shadow-2xl dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4">
+              <h3 className="text-lg font-black text-[var(--text-primary)]">输入访问密码</h3>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">密码正确后，本次打开页面会临时显示隐藏视频源。</p>
+            </div>
+            <input
+              autoFocus
+              type="password"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value)
+                if (passwordError) setPasswordError('')
+              }}
+              placeholder="请输入密码"
+              className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-[var(--text-primary)] outline-none focus:border-red-500 dark:border-white/10 dark:bg-gray-950"
+            />
+            {passwordError && <p className="mt-2 text-sm text-red-500">{passwordError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPasswordDialog(false)}
+                className="rounded-xl px-4 py-2 text-sm font-bold text-[var(--text-muted)] hover:bg-black/5 dark:hover:bg-white/10"
+              >
+                取消
+              </button>
+              <button type="submit" className="rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white hover:bg-red-600">
+                确认
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -286,7 +366,14 @@ export default function VideoHome() {
   const initialArea = searchParams.get('area') || ''
   const initialYear = searchParams.get('year') || ''
   const initialSort = searchParams.get('sort') || 'time'
-  const initialSourceId = searchParams.get('source') || (typeof window !== 'undefined' ? window.localStorage.getItem(VIDEO_SOURCE_STORAGE_KEY) : '') || getDefaultVideoSourceId()
+  const visibleSourceIds = useMemo(() => new Set(VIDEO_SOURCES.map((source) => source.id)), [])
+  const requestedSourceId = searchParams.get('source') || ''
+  const storedSourceId = typeof window !== 'undefined' ? window.localStorage.getItem(VIDEO_SOURCE_STORAGE_KEY) : ''
+  const initialSourceId = visibleSourceIds.has(requestedSourceId)
+    ? requestedSourceId
+    : storedSourceId && visibleSourceIds.has(storedSourceId)
+      ? storedSourceId
+      : getDefaultVideoSourceId()
   const initialPage = Number(searchParams.get('page') || '1') || 1
 
   const [keywordInput, setKeywordInput] = useState(initialKeyword)
@@ -374,8 +461,12 @@ export default function VideoHome() {
   }, [area, keyword, page, setSearchParams, sort, sourceId, typeId, year])
 
   useEffect(() => {
+    if (!visibleSourceIds.has(sourceId)) {
+      window.localStorage.removeItem(VIDEO_SOURCE_STORAGE_KEY)
+      return
+    }
     window.localStorage.setItem(VIDEO_SOURCE_STORAGE_KEY, sourceId)
-  }, [sourceId])
+  }, [sourceId, visibleSourceIds])
 
   // 搜索输入防抖：停止输入 300ms 后才触发搜索，避免每次键入都并发打多源。
   useEffect(() => {

@@ -8,6 +8,8 @@ import { cn } from '@/utils/cn'
 
 const FALLBACK_COVER = 'data:image/svg+xml;utf8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480"%3E%3Crect width="360" height="480" rx="28" fill="%231c1917"/%3E%3Cpath d="M96 96h142a34 34 0 0 1 34 34v254H116a36 36 0 0 1-36-36V112a16 16 0 0 1 16-16z" fill="%23fff" opacity=".12"/%3E%3Ctext x="180" y="256" fill="%23fff" opacity=".55" font-family="serif" font-size="34" text-anchor="middle"%3EBook%3C/text%3E%3C/svg%3E'
 
+const routePart = (value: string) => encodeURIComponent(value)
+
 export default function NovelDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -49,7 +51,7 @@ export default function NovelDetailPage() {
   const readChapter = (chapter: NovelChapter) => {
     if (!detail) return
     upsertHistory({ novel: detail, chapter, readAt: Date.now() })
-    navigate(`/novel/${detail.id}/chapter/${chapter.id}`)
+    navigate(`/novel/${routePart(detail.id)}/chapter/${routePart(chapter.id)}`)
   }
 
   const handleDownloadAndRead = async () => {
@@ -57,7 +59,7 @@ export default function NovelDetailPage() {
     setDownloading(true)
     try {
       await novelApi.downloadBook(detail.id, detail.sourceId)
-      navigate(`/novel/${detail.id}/chapter/__downloaded__`)
+      navigate(`/novel/${routePart(detail.id)}/chapter/__downloaded__`)
     } catch (err) {
       console.error('Download novel failed:', err)
       setError(err instanceof Error ? err.message : '下载小说失败')

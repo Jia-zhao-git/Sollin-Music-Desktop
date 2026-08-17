@@ -190,6 +190,43 @@ const jiujiuCategorySearchKeywords: Record<string, string> = {
   wxjp: '文学精品',
 }
 
+const aitbooksCategories = [
+  { id: 'home', name: '推荐', sourceId: 'aitbooks' as const, group: '类型' },
+  { id: 'search', name: '搜索', sourceId: 'aitbooks' as const, group: '类型' },
+]
+
+const txtddCategories = [
+  { id: 'all', name: '全部', sourceId: 'txtdd' as const, group: '类型' },
+]
+
+const suduguCategories = [
+  { id: 'all', name: '全部', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'xuanhuan', name: '玄幻', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'xianxia', name: '仙侠', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'dushi', name: '都市', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'lishi', name: '历史', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'junshi', name: '军事', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'kehuan', name: '科幻', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'yanqing', name: '言情', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'wuxia', name: '武侠', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'qing', name: '轻小说', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'xuanyi', name: '悬疑', sourceId: 'sudugu' as const, group: '类型' },
+  { id: 'wanjie', name: '完结', sourceId: 'sudugu' as const, group: '状态' },
+]
+
+const shukugeCategories = [
+  { id: 'all', name: '全部', sourceId: 'shukuge' as const, group: '类型' },
+  { id: 'i-xuanhuan', name: '玄幻', sourceId: 'shukuge' as const, group: '类型' },
+  { id: 'i-yanqing', name: '言情', sourceId: 'shukuge' as const, group: '类型' },
+  { id: 'i-wuxia', name: '武侠', sourceId: 'shukuge' as const, group: '类型' },
+  { id: 'i-lishi', name: '历史', sourceId: 'shukuge' as const, group: '类型' },
+  { id: 'i-wangyou', name: '网游', sourceId: 'shukuge' as const, group: '类型' },
+  { id: 'i-kehuan', name: '科幻', sourceId: 'shukuge' as const, group: '类型' },
+  { id: 'i-xuanyi', name: '悬疑', sourceId: 'shukuge' as const, group: '类型' },
+  { id: 'top', name: '排行榜', sourceId: 'shukuge' as const, group: '榜单' },
+  { id: 'new', name: '最新', sourceId: 'shukuge' as const, group: '榜单' },
+]
+
 const normalizeQimaoListItem = (item: any, sourceId: NovelSourceId): NovelListItem => ({
   id: `${sourceId}:${toStr(item.id)}`,
   rawId: toStr(item.id),
@@ -239,6 +276,16 @@ const htmlToText = (html: string) => cleanHtml(html)
   .map((line) => line.trim())
   .filter(Boolean)
   .join('\n')
+
+const htmlToPlainText = (html: string) => htmlToText(html)
+  .replace(/[\t ]{2,}/g, ' ')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim()
+
+const stripMojibakeTitle = (value: string) => value
+  .replace(/\s*[-_].*$/, '')
+  .replace(/全文免费阅读.*$/, '')
+  .trim()
 
 const resolveUrl = (base: string, href?: string) => {
   if (!href) return ''
@@ -451,6 +498,45 @@ const kuwoCategories = [
   { id: '连载', name: '连载', sourceId: 'kuwo' as const, group: '完结' },
 ]
 
+const suixkanCategories = [
+  { id: 'search', name: '搜索', sourceId: 'suixkan' as const, group: '类型' },
+  { id: '玄幻奇幻', name: '玄幻奇幻', sourceId: 'suixkan' as const, group: '类型' },
+  { id: '都市青春', name: '都市青春', sourceId: 'suixkan' as const, group: '类型' },
+  { id: '古代言情', name: '古代言情', sourceId: 'suixkan' as const, group: '类型' },
+  { id: '现代言情', name: '现代言情', sourceId: 'suixkan' as const, group: '类型' },
+]
+
+const fetchSuixkanList = async (params: { page?: number; keyword?: string; categoryId?: string }): Promise<NovelListResult> => {
+  const page = params.page || 1
+  const query = params.keyword || params.categoryId || '玄幻奇幻'
+  const pages = await Promise.all(Array.from({ length: 3 }, (_, index) => {
+    const sourcePage = ((page - 1) * 3) + index + 1
+    const url = `http://m.suixkan.com/s/1.html?keyword=${encodeURIComponent(query)}&page=${sourcePage}`
+    return httpClient.getText(url, qimaoHeaders()).catch(() => '')
+  }))
+  const blocks = pages.flatMap((html) => Array.from(html.matchAll(/<div[^>]*class="v-list-item[^"]*"[^>]*onclick="newWebView\('([^']+)'[\s\S]*?(?=<div[^>]*class="v-list-item|<div[^>]*class="pages|<\/body>)/gi)))
+  const list = dedupeList(blocks.map((match): NovelListItem => {
+    const block = match[0]
+    const href = match[1]
+    const rawId = href.match(/\/b\/(\d+)\.html/)?.[1] || href
+    const name = block.match(/class="v-title"[^>]*>([\s\S]*?)<\/div>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() || '未命名小说'
+    return {
+      id: `suixkan:${rawId}`,
+      rawId,
+      sourceId: 'suixkan',
+      sourceName: getNovelSource('suixkan').name,
+      name,
+      author: block.match(/class="v-author"[^>]*>([\s\S]*?)(?:&nbsp;|<\/div>)/i)?.[1]?.replace(/<[^>]+>/g, '').trim() || undefined,
+      cover: resolveUrl('http://m.suixkan.com', block.match(/<img[^>]+src="([^"]+)"/i)?.[1]),
+      intro: htmlToText(block.match(/class="v-intro"[^>]*>([\s\S]*?)<\/div>/i)?.[1] || ''),
+      category: block.match(/class="border-1px base-label"[^>]*>([^<]+)<\/div>/i)?.[1]?.trim() || undefined,
+      wordCount: block.match(/class="v-words[^>]*>([\s\S]*?)<\/div>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() || undefined,
+      tags: [],
+    }
+  }).filter((item) => item.rawId), (item) => item.rawId)
+  return { page, pageCount: list.length >= 15 ? page + 1 : page, total: list.length, list, categories: suixkanCategories, sourceId: 'suixkan', sourceName: getNovelSource('suixkan').name }
+}
+
 const fetchKuwoList = async (params: { page?: number; keyword?: string; categoryId?: string }): Promise<NovelListResult> => {
   const page = params.page || 1
   const categoryParts = (params.categoryId || 'all').split('|').filter(Boolean)
@@ -512,6 +598,39 @@ const fetchKuwoDetail = async (id: string): Promise<NovelDetail | null> => {
   }
 }
 
+const fetchSuixkanDetail = async (id: string): Promise<NovelDetail | null> => {
+  const rawId = stripBookIdPrefix(id, 'suixkan')
+  const url = `http://m.suixkan.com/b/${rawId}.html`
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const tocHref = html.match(/class="sumchapter"[\s\S]*?<a[^>]+href="([^"]+)"/i)?.[1]
+  const tocUrl = tocHref ? resolveUrl(url, tocHref) : `http://m.suixkan.com/c/${rawId}.html`
+  const tocHtml = await httpClient.getText(tocUrl, qimaoHeaders())
+  const chapters = Array.from(tocHtml.matchAll(/<li>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*<\/li>/gi)).map((match, index): NovelChapter => ({
+    id: match[1].match(/\/r\/\d+\/(\d+)\.html/)?.[1] || encodeURIComponent(match[1]),
+    title: match[2].replace(/<[^>]+>/g, '').trim() || `章节 ${index + 1}`,
+    url: resolveUrl(tocUrl, match[1]),
+    index: index + 1,
+  }))
+  return {
+    id: `suixkan:${rawId}`,
+    rawId,
+    sourceId: 'suixkan',
+    sourceName: getNovelSource('suixkan').name,
+    name: html.match(/class="face-info-title"[^>]*>([\s\S]*?)<\/p>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() || '未命名小说',
+    author: html.match(/<span>作者[：:]\s*([^<]+)<\/span>/i)?.[1]?.trim() || undefined,
+    cover: resolveUrl(url, html.match(/class="face-cover-img"[^>]+src="([^"]+)"/i)?.[1]),
+    intro: htmlToText(html.match(/id="intro"[^>]*>([\s\S]*?)<p class="detail-btn"/i)?.[1] || ''),
+    category: html.match(/<span>分类[：:]\s*([^<]+)<\/span>/i)?.[1]?.trim() || undefined,
+    status: html.match(/class="content-label[^>]*>[\s\S]*?([^\s<]+)[\s\S]*?<\/span>/i)?.[1]?.trim() || undefined,
+    latestChapter: chapters[chapters.length - 1]?.title,
+    wordCount: html.match(/<span>字数[：:]\s*([^<]+)<\/span>/i)?.[1]?.trim() || undefined,
+    score: undefined,
+    tags: [],
+    updateTime: undefined,
+    chapters,
+  }
+}
+
 const fetchKuwoChapter = async (bookId: string, chapterId: string): Promise<NovelReaderResult> => {
   const rawBookId = stripBookIdPrefix(bookId, 'kuwo')
   const rawChapterId = stripBookIdPrefix(chapterId, 'kuwo')
@@ -525,6 +644,382 @@ const fetchKuwoChapter = async (bookId: string, chapterId: string): Promise<Nove
     title: toStr(data?.chapter_name) || '章节',
     content: toStr(data?.content) || '暂无正文',
   }
+}
+
+const fetchSuixkanChapter = async (bookId: string, chapterId: string): Promise<NovelReaderResult> => {
+  const rawBookId = stripBookIdPrefix(bookId, 'suixkan')
+  const rawChapterId = stripBookIdPrefix(chapterId, 'suixkan')
+  const url = rawChapterId.startsWith('/r/') ? resolveUrl('http://m.suixkan.com', rawChapterId) : `http://m.suixkan.com/r/${rawBookId}/${rawChapterId}.html`
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const sections = Array.from(html.matchAll(/<div[^>]*class="section[^"]*"[^>]*>[\s\S]*?<h2[^>]*>([\s\S]*?)<\/h2>[\s\S]*?<div[^>]*class="con"[^>]*>([\s\S]*?)<\/div>/gi))
+  const content = htmlToText(sections.map((match) => match[2]).join('\n'))
+    .replace(/（本章未完，请翻页）/g, '')
+    .replace(/（本章完）/g, '')
+    .trim()
+  return {
+    bookId: rawBookId,
+    sourceId: 'suixkan',
+    chapterId: rawChapterId,
+    title: htmlToText(sections[0]?.[1] || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '章节'),
+    content: content || '暂无正文',
+    prevChapterId: html.match(/<a[^>]+href="\/r\/\d+\/(\d+)\.html"[^>]*>上[一ㄧ]章/i)?.[1],
+    nextChapterId: html.match(/<a[^>]+href="\/r\/\d+\/(\d+)\.html"[^>]*>下[一ㄧ]章/i)?.[1],
+  }
+}
+
+const fetchAitbooksList = async (params: { page?: number; keyword?: string; categoryId?: string }): Promise<NovelListResult> => {
+  const page = params.page || 1
+  const keyword = (params.keyword || '').trim()
+  const source = getNovelSource('aitbooks')
+  const html = keyword
+    ? (await httpClient.request({
+      url: 'https://m.aitbooks.cc/search/',
+      method: 'POST',
+      body: `keyword=${encodeURIComponent(keyword)}`,
+      headers: {
+        ...kuwoHeaders(),
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Referer: 'https://m.aitbooks.cc/',
+      },
+    })).bodyText
+    : await httpClient.getText(page === 1 ? 'https://m.aitbooks.cc/' : 'https://m.aitbooks.cc/search/', kuwoHeaders())
+  const links = Array.from(html.matchAll(/<a[^>]+href="(\/[A-Za-z0-9]+(?:\.html)?)"[^>]*>([\s\S]*?)<\/a>/gi))
+  const list = dedupeList(links.map((match): NovelListItem | null => {
+    const rawId = match[1].replace(/^\//, '').replace(/\.html$/, '')
+    const text = htmlToPlainText(match[2])
+    const name = stripMojibakeTitle(text.replace(/马上阅读/g, '').replace(/第\s*\d+\s*[章节节]/g, ''))
+    if (!rawId || !name || name.length < 2 || /^(首页|分类|热门|完结|日推|阅读记录|找小说|用户|马上阅读|作品详情|作品目录|加入书架|null)$/.test(name)) return null
+    return {
+      id: `aitbooks:${rawId}`,
+      rawId,
+      sourceId: 'aitbooks',
+      sourceName: source.name,
+      name,
+      author: undefined,
+      intro: '',
+      tags: [],
+    }
+  }).filter(Boolean) as NovelListItem[], (item) => item.rawId)
+  return { page, pageCount: list.length >= 20 ? page + 1 : page, total: list.length, list, categories: aitbooksCategories, sourceId: 'aitbooks', sourceName: source.name }
+}
+
+const decodeAitbooksPayload = (payload: string) => payload
+  .replace(/\x01/g, ';&#x')
+  .replace(/\x02/g, '&#x')
+  .replace(/\x03/g, ';&#')
+  .replace(/\x04/g, ';\n')
+  .replace(/\x05/g, 'ff0c')
+  .replace(/\x06/g, '7684')
+  .replace(/\x07/g, '3002')
+  .replace(/&#x([0-9a-f]+);?/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+  .replace(/\\n/g, '\n')
+
+const fetchAitbooksDetail = async (id: string): Promise<NovelDetail | null> => {
+  const rawId = stripBookIdPrefix(id, 'aitbooks')
+  const source = getNovelSource('aitbooks')
+  const url = `https://m.aitbooks.cc/${rawId}.html`
+  const html = await httpClient.getText(url, kuwoHeaders())
+  const pageCount = Number(html.match(/i <= (\d+); i\+\+/)?.[1] || 1)
+  const pages = await Promise.all(Array.from({ length: Math.min(Math.max(pageCount, 1), 80) }, async (_, index) => {
+    const pageUrl = index === 0 ? `https://m.aitbooks.cc/${rawId}/indexlist.html` : `https://m.aitbooks.cc/${rawId}/indexlist_${index + 1}.html`
+    try { return await httpClient.getText(pageUrl, kuwoHeaders()) } catch { return '' }
+  }))
+  const chapters = dedupeList(pages.flatMap((tocHtml) => Array.from(tocHtml.matchAll(/<li>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*<\/li>/gi))).map((match, index): NovelChapter => ({
+    id: match[1].match(/\/([^/]+\/\d+)\.html/)?.[1] || match[1],
+    title: htmlToText(match[2]).replace(/^正文\.?/, '').trim() || `章节 ${index + 1}`,
+    url: resolveUrl(url, match[1]),
+    index: index + 1,
+  })), (item) => item.id)
+  return {
+    id: `aitbooks:${rawId}`,
+    rawId,
+    sourceId: 'aitbooks',
+    sourceName: source.name,
+    name: html.match(/property="og:novel:book_name" content="([^"]+)"/i)?.[1] || html.match(/property="og:title" content="([^"]+)"/i)?.[1] || '未命名小说',
+    author: html.match(/property="og:novel:author" content="([^"]+)"/i)?.[1] || undefined,
+    cover: resolveUrl(url, html.match(/property="og:image" content="([^"]+)"/i)?.[1]),
+    intro: html.match(/property="og:description" content="([^"]+)"/i)?.[1] || '',
+    category: html.match(/property="og:novel:category" content="([^"]+)"/i)?.[1] || undefined,
+    status: html.match(/property="og:novel:status" content="([^"]+)"/i)?.[1] || undefined,
+    latestChapter: html.match(/property="og:novel:latest_chapter_name" content="([^"]+)"/i)?.[1] || chapters[chapters.length - 1]?.title,
+    updateTime: html.match(/property="og:novel:update_time" content="([^"]+)"/i)?.[1] || undefined,
+    tags: [],
+    chapters,
+  }
+}
+
+const fetchAitbooksChapter = async (bookId: string, chapterId: string): Promise<NovelReaderResult> => {
+  const rawBookId = stripBookIdPrefix(bookId, 'aitbooks')
+  const rawChapterId = decodeURIComponent(stripBookIdPrefix(chapterId, 'aitbooks'))
+  const url = rawChapterId.includes('/') ? `https://m.aitbooks.cc/${rawChapterId}.html` : `https://m.aitbooks.cc/${rawBookId}/${rawChapterId}.html`
+  const html = await httpClient.getText(url, kuwoHeaders())
+  const dataUrl = html.match(/initTxt\("([^"]+)","([^"]+)"\)/)?.[1]
+  const title = html.match(/initTxt\("[^"]+","([^"]+)"\)/)?.[1] || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '章节'
+  if (!dataUrl) throw new Error('艾途小说正文地址解析失败')
+  const payload = await httpClient.getText(`https:${dataUrl}`, { ...kuwoHeaders(), Referer: url })
+  const contentRaw = payload.match(/"content":"([\s\S]*?)","replace"/)?.[1]
+  if (!contentRaw) throw new Error('艾途小说正文为空')
+  const content = decodeAitbooksPayload(contentRaw).trim()
+  return {
+    bookId: rawBookId,
+    sourceId: 'aitbooks',
+    chapterId: rawChapterId,
+    title: htmlToText(title),
+    content,
+    prevChapterId: html.match(/<a[^>]+href="\/[^"]+\/(\d+)\.html"[^>]*>上一章/i)?.[1],
+    nextChapterId: html.match(/<a[^>]+href="\/[^"]+\/(\d+)\.html"[^>]*>下一章/i)?.[1],
+  }
+}
+
+const fetchTxtddList = async (params: { page?: number; keyword?: string; categoryId?: string }): Promise<NovelListResult> => {
+  const page = params.page || 1
+  const keyword = (params.keyword || '').trim()
+  const url = keyword
+    ? `https://www.txtdd.top/search.html?keyword=${encodeURIComponent(keyword)}&page=${page}`
+    : 'https://www.txtdd.top/'
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const searchBlocks = Array.from(html.matchAll(/<div[^>]+onclick="window\.open\('([^']+)'[\s\S]*?(?=<div[^>]+onclick="window\.open\('|<div[^>]+class="[^\"]*pagination|<footer)/gi))
+  const homeBlocks = Array.from(html.matchAll(/<a\s+href="(\/novel\/\d+\.html)"[^>]*>[\s\S]*?<\/a>/gi))
+  const blocks = keyword ? searchBlocks : homeBlocks
+  const list = dedupeList(blocks.map((match): NovelListItem | null => {
+    const block = match[0]
+    const href = match[1]
+    const rawId = href.match(/\/novel\/(\d+)\.html/)?.[1] || href
+    const name = htmlToPlainText(block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i)?.[1] || block.match(/<img[^>]+alt="([^"]+)"/i)?.[1] || '')
+    if (!rawId || !name) return null
+    return {
+      id: `txtdd:${rawId}`,
+      rawId,
+      sourceId: 'txtdd',
+      sourceName: getNovelSource('txtdd').name,
+      name,
+      author: block.match(/作者[：:]\s*([^<\n]+)/)?.[1]?.trim() || undefined,
+      cover: resolveUrl('https://www.txtdd.top', block.match(/<img[^>]+src="([^"]+)"/i)?.[1]),
+      intro: htmlToPlainText(block.match(/<p[^>]+class="[^"]*line-clamp-2[^"]*"[^>]*>([\s\S]*?)<\/p>/i)?.[1] || ''),
+      category: htmlToPlainText(block.match(/<span[^>]*>([^<]+)<\/span>/i)?.[1] || ''),
+      status: block.includes('已完结') ? '已完结' : undefined,
+      tags: [],
+    }
+  }).filter(Boolean) as NovelListItem[], (item) => item.rawId)
+  return { page, pageCount: list.length >= 10 ? page + 1 : page, total: list.length, list, categories: txtddCategories, sourceId: 'txtdd', sourceName: getNovelSource('txtdd').name }
+}
+
+const fetchTxtddDetail = async (id: string): Promise<NovelDetail | null> => {
+  const rawId = stripBookIdPrefix(id, 'txtdd')
+  const url = `https://www.txtdd.top/novel/${rawId}.html`
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const maxChapterPage = Math.max(1, ...Array.from(html.matchAll(/chapter_page=(\d+)/gi)).map((match) => Number(match[1]) || 1))
+  const tocPages = await Promise.all(Array.from({ length: Math.min(maxChapterPage, 80) }, async (_, index) => {
+    if (index === 0) return html
+    return httpClient.getText(`${url}?chapter_page=${index + 1}`, qimaoHeaders()).catch(() => '')
+  }))
+  const chapterMatches = tocPages.flatMap((pageHtml) => {
+    const chapterSection = pageHtml.match(/id="chapter-list"[\s\S]*?(?:id="chapter-pagination"|<\/section>)/i)?.[0] || pageHtml
+    return Array.from(chapterSection.matchAll(/<a[^>]+href="(\/book\/[^"]+\.html)"[^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/a>/gi))
+  })
+  const chapters = dedupeList(chapterMatches.map((match, index): NovelChapter => ({
+    id: encodeURIComponent(match[1]),
+    title: htmlToPlainText(match[2]) || `章节 ${index + 1}`,
+    url: resolveUrl(url, match[1]),
+    index: index + 1,
+  })), (item) => item.id)
+  return {
+    id: `txtdd:${rawId}`,
+    rawId,
+    sourceId: 'txtdd',
+    sourceName: getNovelSource('txtdd').name,
+    name: htmlToPlainText(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '') || '未命名小说',
+    author: html.match(/fa-user[\s\S]*?<a[^>]*>([^<]+)<\/a>/i)?.[1]?.trim() || undefined,
+    cover: resolveUrl(url, html.match(/<img[^>]+src="([^"]+)"[^>]+alt="/i)?.[1]),
+    intro: htmlToPlainText(html.match(/<h2[^>]*>小说简介<\/h2>[\s\S]*?<div[^>]*>([\s\S]*?)<\/div>/i)?.[1] || ''),
+    category: html.match(/fa-folder[\s\S]*?<a[^>]*>([^<]+)<\/a>/i)?.[1]?.trim() || undefined,
+    status: html.match(/<span[^>]+rounded-full[^>]*>([^<]+)<\/span>/i)?.[1]?.trim() || undefined,
+    wordCount: html.match(/fa-book[\s\S]*?<\/i>\s*([^<]+)<\/span>/i)?.[1]?.trim() || undefined,
+    latestChapter: chapters[chapters.length - 1]?.title,
+    tags: [],
+    chapters,
+  }
+}
+
+const fetchTxtddChapter = async (bookId: string, chapterId: string): Promise<NovelReaderResult> => {
+  const rawBookId = stripBookIdPrefix(bookId, 'txtdd')
+  const rawChapterId = decodeURIComponent(stripBookIdPrefix(chapterId, 'txtdd'))
+  const url = rawChapterId.startsWith('http') ? rawChapterId : resolveUrl('https://www.txtdd.top', rawChapterId)
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const title = htmlToPlainText(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '章节')
+  const contentHtml = html.match(/<div[^>]*class="[^"]*read-content[^"]*j_readContent[^"]*"[^>]*>([\s\S]*?)<\/div>/i)?.[1] || ''
+  const content = htmlToPlainText(contentHtml)
+  if (!content) throw new Error('瀚海书阁正文为空')
+  return {
+    bookId: rawBookId,
+    sourceId: 'txtdd',
+    chapterId: rawChapterId,
+    title,
+    content,
+    prevChapterId: html.match(/id="j_chapterPrev"[^>]+href="([^"]+)"/i)?.[1],
+    nextChapterId: html.match(/id="j_chapterNext"[^>]+href="([^"]+)"/i)?.[1],
+  }
+}
+
+const fetchSuduguList = async (params: { page?: number; keyword?: string; categoryId?: string }): Promise<NovelListResult> => {
+  const page = params.page || 1
+  const keyword = (params.keyword || '').trim()
+  const categoryId = params.categoryId && params.categoryId !== 'all' ? params.categoryId : ''
+  const url = keyword
+    ? `https://www.sudugu.org/i/sor.aspx?key=${encodeURIComponent(keyword)}${page > 1 ? `&page=${page}` : ''}`
+    : categoryId
+      ? `https://www.sudugu.org/${categoryId}/${page > 1 ? `${page}.html` : ''}`
+      : `https://www.sudugu.org/${page > 1 ? `zuixin/${page}.html` : ''}`
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const blocks = Array.from(html.matchAll(/<div class="item">[\s\S]*?<div class="itemtxt">[\s\S]*?<\/div><\/div>/gi))
+  const list = dedupeList(blocks.map((match): NovelListItem | null => {
+    const block = match[0]
+    const titleMatch = block.match(/<h[13]>[\s\S]*?<a href="([^"]+)"[^>]*>([^<]+)<\/a>[\s\S]*?<\/h[13]>/i)
+    const href = titleMatch?.[1]
+    const name = titleMatch?.[2]?.trim()
+    const rawId = href?.match(/\/(\d+)\/?/)?.[1] || href
+    if (!rawId || !name) return null
+    return {
+      id: `sudugu:${rawId}`,
+      rawId,
+      sourceId: 'sudugu',
+      sourceName: getNovelSource('sudugu').name,
+      name,
+      author: block.match(/作者[：:]\s*([^<]+)/)?.[1]?.trim() || undefined,
+      cover: resolveUrl('https://www.sudugu.org', block.match(/<img[^>]+src="([^"]+)"/i)?.[1]),
+      intro: htmlToPlainText(block.match(/<p>(?!<span)([\s\S]*?)<\/p>/i)?.[1] || ''),
+      category: block.match(/<span>([^<]+)<\/span>\s*<span>([^<]+)<\/span>/i)?.[2] || undefined,
+      status: block.match(/<span>([^<]+)<\/span>/i)?.[1] || undefined,
+      tags: [],
+    }
+  }).filter(Boolean) as NovelListItem[], (item) => item.rawId)
+  return { page, pageCount: list.length >= 10 ? page + 1 : page, total: list.length, list, categories: suduguCategories, sourceId: 'sudugu', sourceName: getNovelSource('sudugu').name }
+}
+
+const fetchSuduguDetail = async (id: string): Promise<NovelDetail | null> => {
+  const rawId = stripBookIdPrefix(id, 'sudugu')
+  const url = `https://www.sudugu.org/${rawId}/`
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const pageUrls = Array.from(html.matchAll(/<option\s+value="([^"]+)"[^>]*>第\d+页<\/option>/gi))
+    .map((match) => match[1])
+    .filter((value) => value && !value.startsWith('index-'))
+    .map((value) => resolveUrl(url, value.endsWith('.html') ? value : `p-${value}.html`))
+  const tocPages = [html, ...(await Promise.all(pageUrls.map((pageUrl) => httpClient.getText(pageUrl, qimaoHeaders()).catch(() => ''))))]
+  const chapterMatches = tocPages.flatMap((pageHtml) => {
+    const toc = pageHtml.match(/<div id="list"[\s\S]*?<\/div>/i)?.[0] || ''
+    return Array.from(toc.matchAll(/<li>\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>\s*<\/li>/gi))
+  })
+  const chapters = dedupeList(chapterMatches.map((match, index): NovelChapter => ({
+    id: match[1],
+    title: htmlToPlainText(match[2]) || `章节 ${index + 1}`,
+    url: resolveUrl(url, match[1]),
+    index: index + 1,
+  })), (item) => item.id)
+  return {
+    id: `sudugu:${rawId}`,
+    rawId,
+    sourceId: 'sudugu',
+    sourceName: getNovelSource('sudugu').name,
+    name: htmlToPlainText(html.match(/<h1>[\s\S]*?<a[^>]*>([^<]+)<\/a>[\s\S]*?<\/h1>/i)?.[1] || html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '') || '未命名小说',
+    author: html.match(/作者[：:]\s*<a[^>]*>([^<]+)<\/a>/i)?.[1]?.trim() || undefined,
+    cover: resolveUrl(url, html.match(/<div class="item">[\s\S]*?<img[^>]+src="([^"]+)"/i)?.[1]),
+    intro: htmlToPlainText(html.match(/<div class="des"[^>]*>([\s\S]*?)<\/div>/i)?.[1] || ''),
+    category: html.match(/<span>([^<]+)<\/span>\s*<span>([^<]+)<\/span>/i)?.[2] || undefined,
+    status: html.match(/<span>([^<]+)<\/span>/i)?.[1] || undefined,
+    wordCount: htmlToPlainText(html.match(/<h1>\s*<i>([^<]+)<\/i>/i)?.[1] || ''),
+    latestChapter: chapters[chapters.length - 1]?.title,
+    tags: [],
+    chapters,
+  }
+}
+
+const fetchSuduguChapter = async (bookId: string, chapterId: string): Promise<NovelReaderResult> => {
+  const rawBookId = stripBookIdPrefix(bookId, 'sudugu')
+  const rawChapterId = decodeURIComponent(stripBookIdPrefix(chapterId, 'sudugu'))
+  const url = rawChapterId.startsWith('http') ? rawChapterId : resolveUrl(`https://www.sudugu.org/${rawBookId}/`, rawChapterId)
+  const pages: string[] = []
+  let currentUrl = url
+  for (let index = 0; index < 10; index += 1) {
+    const pageHtml = await httpClient.getText(currentUrl, qimaoHeaders())
+    pages.push(pageHtml)
+    const nextPageHref = pageHtml.match(/<div class="prenext"[\s\S]*?<a href="([^"]+)"[^>]*>下一页<\/a>/i)?.[1]
+    if (!nextPageHref) break
+    currentUrl = resolveUrl(currentUrl, nextPageHref)
+  }
+  const html = pages[0] || ''
+  const title = htmlToPlainText(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || html.match(/<p>([^<]+)<\/p>/i)?.[1] || '章节')
+  const content = pages.map((pageHtml) => htmlToPlainText(pageHtml.match(/<div class="con"[^>]*>([\s\S]*?)<\/div>/i)?.[1] || '')).filter(Boolean).join('\n\n')
+  if (!content) throw new Error('速读谷正文为空')
+  return { bookId: rawBookId, sourceId: 'sudugu', chapterId: rawChapterId, title, content, prevChapterId: html.match(/<a href="([^"]+)"[^>]*>上一章<\/a>/i)?.[1], nextChapterId: (pages[pages.length - 1] || html).match(/<a href="([^"]+)"[^>]*>下一章<\/a>/i)?.[1] }
+}
+
+const fetchShukugeList = async (params: { page?: number; keyword?: string; categoryId?: string }): Promise<NovelListResult> => {
+  const page = params.page || 1
+  const keyword = (params.keyword || '').trim()
+  const categoryId = params.categoryId && params.categoryId !== 'all' ? params.categoryId : ''
+  const url = keyword
+    ? `http://wap.shukuge.com/search?q=${encodeURIComponent(keyword)}${page > 1 ? `&page=${page}` : ''}`
+    : categoryId
+      ? `http://wap.shukuge.com/${categoryId}/`
+      : `http://wap.shukuge.com/${page > 1 ? `new/${page}.html` : ''}`
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const bookboxBlocks = Array.from(html.matchAll(/<div class="bookbox">[\s\S]*?<\/div>\s*<\/div>/gi))
+  const hotBlocks = Array.from(html.matchAll(/<div class="item">[\s\S]*?<\/dl><\/div>/gi))
+  const liBlocks = Array.from(html.matchAll(/<li>[\s\S]*?<span class="s2"><a href="\/book\/\d+\/"[\s\S]*?<\/li>/gi))
+  const blocks = [...bookboxBlocks, ...hotBlocks, ...liBlocks]
+  const list = dedupeList(blocks.map((match): NovelListItem | null => {
+    const block = match[0]
+    const linkMatch = block.match(/class="bookname"[\s\S]*?<a href="([^"]+)"[^>]*>([^<]+)<\/a>/i)
+      || block.match(/<dt>[\s\S]*?<a href="([^"]+)"[^>]*>([^<]+)<\/a>[\s\S]*?<\/dt>/i)
+      || block.match(/<span class="s2"><a href="([^"]+)"[^>]*>([^<]+)<\/a><\/span>/i)
+    const href = linkMatch?.[1]
+    const name = linkMatch?.[2]?.trim()
+    const rawId = href?.match(/\/book\/(\d+)\//)?.[1] || href
+    if (!rawId || !name) return null
+    return { id: `shukuge:${rawId}`, rawId, sourceId: 'shukuge', sourceName: getNovelSource('shukuge').name, name, author: block.match(/作者[：:]\s*([^<]+)/)?.[1]?.trim() || block.match(/<dt>\s*<span>([^<]+)<\/span>/i)?.[1]?.trim() || block.match(/<span class="s3">([^<]+)<\/span>/i)?.[1]?.trim() || undefined, cover: resolveUrl('http://wap.shukuge.com', block.match(/<img[^>]+src="([^"]+)"/i)?.[1]), intro: htmlToPlainText(block.match(/<dd[^>]*>([\s\S]*?)<\/dd>/i)?.[1] || ''), category: block.match(/分类[：:]\s*([^<]+)/)?.[1]?.trim() || block.match(/<span class="s1">\[([^\]]+)\]<\/span>/i)?.[1]?.trim() || undefined, latestChapter: htmlToPlainText(block.match(/最新章节[：:]?[\s\S]*?<a[^>]*>([^<]+)<\/a>/i)?.[1] || ''), tags: [] }
+  }).filter(Boolean) as NovelListItem[], (item) => item.rawId)
+  return { page, pageCount: list.length >= 10 ? page + 1 : page, total: list.length, list, categories: shukugeCategories, sourceId: 'shukuge', sourceName: getNovelSource('shukuge').name }
+}
+
+const fetchShukugeDetail = async (id: string): Promise<NovelDetail | null> => {
+  const rawId = stripBookIdPrefix(id, 'shukuge')
+  const url = `http://wap.shukuge.com/book/${rawId}/`
+  const html = await httpClient.getText(url, qimaoHeaders())
+  const pageUrls = Array.from(html.matchAll(/<option\s+value="([^"]+)"[^>]*>第\d+\s*-\s*\d+章<\/option>/gi))
+    .map((match) => match[1])
+    .filter((value) => value && !value.endsWith(`/${rawId}/`))
+    .map((value) => resolveUrl(url, value))
+  const tocPages = [html, ...(await Promise.all(pageUrls.map((pageUrl) => httpClient.getText(pageUrl, qimaoHeaders()).catch(() => ''))))]
+  const chapterMatches = tocPages.flatMap((pageHtml) => {
+    const toc = pageHtml.match(/全部章节列表[\s\S]*?(?:<div class="listpage"|<script>info2)/i)?.[0] || ''
+    return Array.from(toc.matchAll(/<a\s+href\s*="([^"]+)"[^>]*>([^<]+)<\/a>/gi)).filter((match) => /\/book\/\d+\/\d+\.html/.test(match[1]))
+  })
+  const chapters = dedupeList(chapterMatches.map((match, index): NovelChapter => ({ id: match[1], title: htmlToPlainText(match[2]).replace(/^\d+[、.]/, ''), url: resolveUrl(url, match[1]), index: index + 1 })), (item) => item.id)
+  return { id: `shukuge:${rawId}`, rawId, sourceId: 'shukuge', sourceName: getNovelSource('shukuge').name, name: htmlToPlainText(html.match(/class="name"[^>]*>([^<]+)</i)?.[1] || ''), author: html.match(/作者[：:]\s*([^<]+)/)?.[1]?.trim(), cover: resolveUrl(url, html.match(/class="cover"[\s\S]*?<img[^>]+src="([^"]+)"/i)?.[1]), intro: htmlToPlainText(html.match(/class="book_about"[\s\S]*?<dd[^>]*>([\s\S]*?)<\/dd>/i)?.[1] || ''), category: html.match(/分类[：:]\s*([^<]+)/)?.[1]?.trim(), status: html.match(/状态[：:]\s*([^<]+)/)?.[1]?.trim(), wordCount: html.match(/字数[：:]\s*([^<]+)/)?.[1]?.trim(), latestChapter: chapters[chapters.length - 1]?.title, tags: [], chapters }
+}
+
+const fetchShukugeChapter = async (bookId: string, chapterId: string): Promise<NovelReaderResult> => {
+  const rawBookId = stripBookIdPrefix(bookId, 'shukuge')
+  const rawChapterId = decodeURIComponent(stripBookIdPrefix(chapterId, 'shukuge'))
+  const url = rawChapterId.startsWith('http') ? rawChapterId : resolveUrl(`http://wap.shukuge.com/book/${rawBookId}/`, rawChapterId)
+  const pages: string[] = []
+  let currentUrl = url
+  for (let index = 0; index < 10; index += 1) {
+    const pageHtml = await httpClient.getText(currentUrl, qimaoHeaders())
+    pages.push(pageHtml)
+    const nextPageHref = pageHtml.match(/id="pb_next"[^>]+href="([^"]+)"[^>]*>下一页<\/a>/i)?.[1]
+    if (!nextPageHref) break
+    currentUrl = resolveUrl(currentUrl, nextPageHref)
+  }
+  const html = pages[0] || ''
+  const title = htmlToPlainText(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '章节')
+  let content = pages.map((pageHtml) => htmlToPlainText(pageHtml.match(/id="chaptercontent"[^>]*>([\s\S]*?)(?:<div class="addbook"|<p class="Readpage"|<\/div>)/i)?.[1] || '')).filter(Boolean).join('\n\n')
+    .replace(/\(第\d+\/\d+页\)/g, '')
+    .replace(/本章未完，请点击下一页继续阅读/g, '')
+    .replace(/阅读网址：www\.shukuge\.com/g, '')
+    .trim()
+  if (!content) throw new Error('365小说网正文为空')
+  return { bookId: rawBookId, sourceId: 'shukuge', chapterId: rawChapterId, title, content, prevChapterId: html.match(/id="pb_prev"[^>]+href="([^"]+)"/i)?.[1], nextChapterId: (pages[pages.length - 1] || html).match(/id="pb_next"[^>]+href="([^"]+)"[^>]*>下一章<\/a>/i)?.[1] }
 }
 
 const fetchBoluoList = async (params: { page?: number; keyword?: string }): Promise<NovelListResult> => {
@@ -640,13 +1135,18 @@ const fetchStoDetail = async (id: string): Promise<NovelDetail | null> => {
   const tocHref = html.match(/id=['"]allchapter['"][\s\S]*?<a[^>]+href="([^"]+)"[^>]*>[^<]*查看全部章节/i)?.[1]
   const tocUrl = tocHref ? resolveUrl(url, tocHref) : `https://www.sto66.com/chapter/${rawId}.html`
   const tocHtml = await httpClient.getText(tocUrl, qimaoHeaders())
-  const chapters = Array.from(tocHtml.matchAll(/<dd[^>]*data-num="(\d+)"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*title="([^"]+)"[^>]*>[\s\S]*?<\/a>/gi))
+  const pageHrefs = dedupeList([
+    tocUrl,
+    ...Array.from(tocHtml.matchAll(/<option[^>]+value="([^"]+)"[^>]*>/gi)).map((match) => resolveUrl(tocUrl, match[1])),
+  ], (item) => item)
+  const tocPages = await Promise.all(pageHrefs.map(async (pageUrl, index) => (index === 0 ? tocHtml : httpClient.getText(pageUrl, qimaoHeaders()))))
+  const chapters = dedupeList(tocPages.flatMap((pageHtml) => Array.from(pageHtml.matchAll(/<dd[^>]*data-num="(\d+)"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*title="([^"]+)"[^>]*>[\s\S]*?<\/a>/gi))
     .map((match): NovelChapter => ({
       id: match[2].match(/\/chapter\/[^/]+\/([^/.]+)\.html/)?.[1] || match[2],
       title: match[3].trim(),
       url: resolveUrl(tocUrl, match[2]),
       index: Number(match[1]) || undefined,
-    }))
+    }))), (item) => item.id)
   return {
     id: `sto66:${rawId}`,
     rawId,
@@ -672,11 +1172,13 @@ const fetchYoushuDetail = async (id: string): Promise<NovelDetail | null> => {
   const url = rawId.startsWith('http') ? rawId : `https://www.95590.org${rawId}`
   const html = await httpClient.getText(url, qimaoHeaders())
   const name = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/_.*$/, '').trim() || '未命名小说'
-  const chapters = Array.from(html.matchAll(/<li[^>]*>\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>\s*<\/li>/gi)).map((match): NovelChapter => ({
+  const contentHtml = html.match(/<article[^>]+id="category-[^"]*"[\s\S]*?<div[^>]*class="entry-content"[^>]*>([\s\S]*?)<\/div>\s*<\/article>/i)?.[1] || ''
+  const chapters = Array.from(contentHtml.matchAll(/<li[^>]*>\s*<a href="([^"]+)"[^>]*>([^<]+)<\/a>\s*<\/li>/gi)).map((match, index): NovelChapter => ({
     id: encodeURIComponent(match[1]),
     title: match[2].trim(),
     url: resolveUrl(url, match[1]),
-  }))
+    index: index + 1,
+  })).filter((chapter) => chapter.url?.includes('/202'))
   return {
     id: `youshu95590:${encodeURIComponent(rawId)}`,
     rawId,
@@ -766,7 +1268,7 @@ const fetchJiujiuDetail = async (id: string): Promise<NovelDetail | null> => {
     || '未命名小说'
   const downloadHref = html.match(/class="downButton"[^>]*href="([^"]+)"/i)?.[1]
   const downloadUrl = resolveUrl(url, downloadHref)
-  const chapters: NovelChapter[] = downloadUrl ? [{ id: encodeURIComponent(downloadUrl), title: 'TXT/RAR/ZIP 下载', url: downloadUrl, index: 1 }] : []
+  const chapters: NovelChapter[] = []
   return {
     id: `jiujiu9191:${encodeURIComponent(rawId)}`,
     rawId,
@@ -778,7 +1280,7 @@ const fetchJiujiuDetail = async (id: string): Promise<NovelDetail | null> => {
     intro: htmlToText(html.match(/《[^》]+》小说简介[\s\S]*?<div class="intro_info">([\s\S]*?)<\/div>/i)?.[1] || ''),
     category: html.match(/分类[：:]\s*(?:<a[^>]*>)?([^<\n]+)/i)?.[1]?.trim() || undefined,
     status: html.match(/状态[：:]\s*([^<\n]+)/i)?.[1]?.trim() || '可下载',
-    latestChapter: downloadUrl ? 'TXT下载' : undefined,
+    latestChapter: downloadUrl ? '可下载（阅读器不直接打开压缩包）' : undefined,
     wordCount: html.match(/大小[：:]\s*([^<\n]+)/i)?.[1]?.trim() || undefined,
     score: undefined,
     tags: ['TXT下载'],
@@ -849,12 +1351,19 @@ const fetchYoushuChapter = async (bookId: string, chapterId: string): Promise<No
   const url = rawChapterId.startsWith('http') ? rawChapterId : resolveUrl(`https://www.95590.org${rawBookId}`, rawChapterId)
   const html = await httpClient.getText(url, qimaoHeaders())
   const title = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() || '章节'
+  const contentHtml = html.match(/<article[^>]+id="entry-[^"]*"[\s\S]*?<div[^>]*class="entry-content"[^>]*>([\s\S]*?)<div[^>]*id="ad-entry-footer"/i)?.[1]
+    || html.match(/<div[^>]*class="entry-content"[^>]*>([\s\S]*?)<div[^>]*id="ad-entry-footer"/i)?.[1]
+    || ''
+  const content = htmlToPlainText(contentHtml)
+    .replace(/^广告.*$/gm, '')
+    .trim()
+  if (!content || /<li\b|cat-item|分类|小说免费在线阅读/.test(contentHtml)) throw new Error('95590 正文解析失败，已阻止目录内容误当正文')
   return {
     bookId: rawBookId,
     sourceId: 'youshu95590',
     chapterId: rawChapterId,
     title,
-    content: htmlToText(html.match(/class="entry-content"[^>]*>([\s\S]*?)<\/div>/i)?.[1] || ''),
+    content,
     nextChapterId: html.match(/rel="next"[^>]+href="([^"]+)"/i)?.[1],
   }
 }
@@ -891,18 +1400,8 @@ const fetchShu52Chapter = async (bookId: string, chapterId: string): Promise<Nov
   }
 }
 
-const fetchJiujiuChapter = async (bookId: string, chapterId: string): Promise<NovelReaderResult> => {
-  const rawBookId = decodeURIComponent(stripBookIdPrefix(bookId, 'jiujiu9191'))
-  const rawChapterId = decodeURIComponent(stripBookIdPrefix(chapterId, 'jiujiu9191'))
-  const downloadUrl = rawChapterId.startsWith('http') ? rawChapterId : resolveUrl(rawBookId, rawChapterId)
-  const content = normalizeDownloadedContent(await getDecodedText(downloadUrl, qimaoHeaders()))
-  return {
-    bookId: rawBookId,
-    sourceId: 'jiujiu9191',
-    chapterId: rawChapterId,
-    title: '下载阅读',
-    content: content || `下载内容为空：${downloadUrl}`,
-  }
+const fetchJiujiuChapter = async (_bookId: string, _chapterId: string): Promise<NovelReaderResult> => {
+  throw new Error('久久小说下载是压缩包下载源，暂不支持在阅读器中直接打开正文')
 }
 
 const normalizeDownloadedContent = (content: string) => content
@@ -970,6 +1469,11 @@ export const novelApi = {
       const settled = await Promise.allSettled(NOVEL_SOURCES.map(async (source) => {
         if (source.id === 'qimao') return fetchQimaoList({ page: params.page, keyword })
         if (source.id === 'kuwo') return fetchKuwoList({ page: params.page, keyword })
+        if (source.id === 'suixkan') return fetchSuixkanList({ page: params.page, keyword })
+        if (source.id === 'aitbooks') return fetchAitbooksList({ page: params.page, keyword })
+        if (source.id === 'txtdd') return fetchTxtddList({ page: params.page, keyword })
+        if (source.id === 'sudugu') return fetchSuduguList({ page: params.page, keyword })
+        if (source.id === 'shukuge') return fetchShukugeList({ page: params.page, keyword })
         if (source.id === 'sto66') return fetchStoList({ page: params.page, keyword })
         if (source.id === 'youshu95590') return fetchYoushuList({ page: params.page, keyword })
         if (source.id === 'shuhuangw') return fetchShuhuangList({ page: params.page, keyword })
@@ -1013,6 +1517,11 @@ export const novelApi = {
         try {
           if (candidate.id === 'qimao') return await fetchQimaoList(params)
           if (candidate.id === 'kuwo') return await fetchKuwoList(params)
+          if (candidate.id === 'suixkan') return await fetchSuixkanList(params)
+          if (candidate.id === 'aitbooks') return await fetchAitbooksList(params)
+          if (candidate.id === 'txtdd') return await fetchTxtddList(params)
+          if (candidate.id === 'sudugu') return await fetchSuduguList(params)
+          if (candidate.id === 'shukuge') return await fetchShukugeList(params)
           if (candidate.id === 'sto66') return await fetchStoList(params)
           if (candidate.id === 'youshu95590') return await fetchYoushuList(params)
           if (candidate.id === 'shuhuangw') return await fetchShuhuangList(params)
@@ -1036,6 +1545,11 @@ export const novelApi = {
         try {
           if (candidate.id === 'qimao') return await fetchQimaoDetail(rawId)
           if (candidate.id === 'kuwo') return await fetchKuwoDetail(rawId)
+          if (candidate.id === 'suixkan') return await fetchSuixkanDetail(rawId)
+          if (candidate.id === 'aitbooks') return await fetchAitbooksDetail(rawId)
+          if (candidate.id === 'txtdd') return await fetchTxtddDetail(rawId)
+          if (candidate.id === 'sudugu') return await fetchSuduguDetail(rawId)
+          if (candidate.id === 'shukuge') return await fetchShukugeDetail(rawId)
           if (candidate.id === 'sto66') return await fetchStoDetail(rawId)
           if (candidate.id === 'youshu95590') return await fetchYoushuDetail(rawId)
           if (candidate.id === 'shuhuangw') return await fetchShuhuangDetail(rawId)
@@ -1075,6 +1589,11 @@ export const novelApi = {
       let result: NovelReaderResult
       if (source.id === 'qimao') result = await fetchQimaoChapter(rawBookId, chapterId)
       else if (source.id === 'kuwo') result = await fetchKuwoChapter(rawBookId, chapterId)
+      else if (source.id === 'suixkan') result = await fetchSuixkanChapter(rawBookId, chapterId)
+      else if (source.id === 'aitbooks') result = await fetchAitbooksChapter(rawBookId, chapterId)
+      else if (source.id === 'txtdd') result = await fetchTxtddChapter(rawBookId, chapterId)
+      else if (source.id === 'sudugu') result = await fetchSuduguChapter(rawBookId, chapterId)
+      else if (source.id === 'shukuge') result = await fetchShukugeChapter(rawBookId, chapterId)
       else if (source.id === 'sto66') result = await fetchStoChapter(rawBookId, chapterId)
       else if (source.id === 'youshu95590') result = await fetchYoushuChapter(rawBookId, chapterId)
       else if (source.id === 'shuhuangw') result = await fetchShuhuangChapter(rawBookId, chapterId)

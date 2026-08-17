@@ -11,12 +11,14 @@ import { cn } from '@/utils/cn'
 
 const FALLBACK_COVER = 'data:image/svg+xml;utf8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480"%3E%3Cdefs%3E%3ClinearGradient id="g" x1="0" x2="1" y1="0" y2="1"%3E%3Cstop stop-color="%23171310"/%3E%3Cstop offset=".55" stop-color="%23422b17"/%3E%3Cstop offset="1" stop-color="%23080705"/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width="360" height="480" rx="28" fill="url(%23g)"/%3E%3Cpath d="M94 94h132a40 40 0 0 1 40 40v252H112a34 34 0 0 1-34-34V110a16 16 0 0 1 16-16z" fill="%23fff" opacity=".12"/%3E%3Cpath d="M116 144h108M116 182h92M116 220h118" stroke="%23fff" stroke-width="12" stroke-linecap="round" opacity=".35"/%3E%3Ctext x="180" y="352" fill="%23ffffff" opacity=".58" font-family="serif" font-size="28" text-anchor="middle"%3ENovel%3C/text%3E%3C/svg%3E'
 
+const routePart = (value: string) => encodeURIComponent(value)
+
 function NovelCard({ item, compact = false, priority = false }: { item: NovelListItem; compact?: boolean; priority?: boolean }) {
   const navigate = useNavigate()
 
   return (
     <button
-      onClick={() => navigate(item.sourceId === 'local' ? `/novel/${item.id}/chapter/ch-1` : `/novel/${item.id}`)}
+      onClick={() => navigate(item.sourceId === 'local' ? `/novel/${routePart(item.id)}/chapter/ch-1` : `/novel/${routePart(item.id)}`)}
       className={cn(
         'group shrink-0 text-left rounded-2xl overflow-hidden bg-white/75 dark:bg-stone-950/55 border border-black/5 dark:border-white/10 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all',
         compact ? 'w-36 sm:w-40' : 'w-full',
@@ -371,7 +373,7 @@ export default function NovelHome() {
                   <LocalBookCard
                     key={book.id}
                     book={book}
-                    onOpen={() => navigate(`/novel/${book.id}/chapter/${book.chapters[0]?.id || 'ch-1'}`)}
+                    onOpen={() => navigate(`/novel/${routePart(book.id)}/chapter/${routePart(book.chapters[0]?.id || 'ch-1')}`)}
                     onRemove={() => {
                       if (window.confirm(`从本地书架移除「${book.name}」？\n（仅移除书架记录，不会删除原文件）`)) removeLocalBook(book.id)
                     }}
@@ -381,7 +383,7 @@ export default function NovelHome() {
                   <DownloadedBookCard
                     key={book.id}
                     book={book}
-                    onOpen={() => navigate(`/novel/${book.id}/chapter/__downloaded__`)}
+                    onOpen={() => navigate(`/novel/${routePart(book.id)}/chapter/__downloaded__`)}
                     onRemove={() => {
                       if (window.confirm(`从离线书架移除「${book.title}」？\n（仅移除记录，需要时可在详情页重新下载）`)) removeDownloadedBook(book.id)
                     }}

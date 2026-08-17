@@ -81,6 +81,11 @@ const parseReleaseNotes = (body?: string): string[] => {
   return lines.length ? lines : ['查看 GitHub Release 获取更新内容。']
 }
 
+const isGithubRateLimited = (response: Response) => (
+  response.status === 403
+  && response.headers.get('X-RateLimit-Remaining') === '0'
+)
+
 export const checkGithubUpdate = async(currentVersion = APP_VERSION): Promise<GithubUpdateInfo> => {
   const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
     headers: {
@@ -89,6 +94,16 @@ export const checkGithubUpdate = async(currentVersion = APP_VERSION): Promise<Gi
   })
 
   if (!response.ok) {
+    if (isGithubRateLimited(response)) {
+      console.debug('GitHub Release 检查跳过：API rate limit exceeded')
+      return {
+        hasUpdate: false,
+        latestVersion: currentVersion,
+        releaseNotes: [],
+        downloadUrl: `https://github.com/${GITHUB_REPO}/releases`,
+        releaseUrl: `https://github.com/${GITHUB_REPO}/releases`,
+      }
+    }
     throw new Error(`GitHub Release 检查失败：${response.status}`)
   }
 
