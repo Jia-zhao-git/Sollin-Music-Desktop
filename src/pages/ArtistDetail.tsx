@@ -171,8 +171,8 @@ export default function ArtistDetail() {
             </button>
 
             {/* Artist header */}
-            <div className="flex gap-6 mb-8">
-                <div className="w-48 h-48 rounded-full overflow-hidden flex-shrink-0 shadow-xl">
+            <div className="mb-8 flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:gap-6 sm:text-left">
+                <div className="h-32 w-32 flex-shrink-0 overflow-hidden rounded-full shadow-xl sm:h-48 sm:w-48">
                     <CoverImage
                         src={artist.avatar}
                         alt={artist.name}
@@ -180,14 +180,14 @@ export default function ArtistDetail() {
                     />
                 </div>
                 <div className="flex-1 flex flex-col justify-center">
-                    <h1 className="text-3xl font-bold mb-2">{artist.name}</h1>
+                    <h1 className="mb-2 text-2xl font-bold sm:text-3xl">{artist.name}</h1>
                     {artist.alias?.length > 0 && (
                         <p className="text-[var(--text-muted)] mb-3">{artist.alias.join(' / ')}</p>
                     )}
                     {artist.identities && (
                         <p className="text-sm text-[var(--text-muted)] mb-4">{artist.identities}</p>
                     )}
-                    <div className="flex items-center gap-6 text-sm text-[var(--text-muted)] mb-4">
+                    <div className="mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-[var(--text-muted)] sm:justify-start sm:gap-6">
                         <span>单曲 {artist.musicSize || songsTotal}</span>
                         <span>专辑 {artist.albumSize || albumsTotal}</span>
                         <span>MV {artist.mvSize || mvsTotal}</span>
@@ -210,7 +210,7 @@ export default function ArtistDetail() {
             )}
 
             {/* Tabs */}
-            <div className="flex gap-6 border-b border-gray-200 dark:border-gray-700 mb-6">
+            <div className="mb-6 flex gap-4 overflow-x-auto border-b border-gray-200 dark:border-gray-700 sm:gap-6">
                 {[
                     { key: 'songs' as TabType, label: '热门歌曲', count: songsTotal },
                     { key: 'albums' as TabType, label: '专辑', count: albumsTotal },
@@ -260,7 +260,7 @@ export default function ArtistDetail() {
 
             {activeTab === 'albums' && (
                 <>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                         {albums.map(album => (
                             <motion.div
                                 key={album.id}
@@ -294,7 +294,7 @@ export default function ArtistDetail() {
             )}
 
             {activeTab === 'mvs' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {mvs.map(mv => (
                         <motion.div
                             key={mv.id}

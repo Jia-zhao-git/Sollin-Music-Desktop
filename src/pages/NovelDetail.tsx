@@ -87,7 +87,7 @@ export default function NovelDetailPage() {
         <ArrowLeft className="h-5 w-5" />返回
       </button>
 
-      <section className="grid gap-6 lg:grid-cols-[260px,1fr]">
+      <section className="grid gap-4 lg:grid-cols-[260px,1fr] lg:gap-6">
         <div className="overflow-hidden rounded-[1.5rem] bg-white/70 dark:bg-stone-950/55 border border-black/5 dark:border-white/10 shadow-sm">
           <div className="aspect-[3/4] bg-stone-950">
             <img src={detail.cover || FALLBACK_COVER} alt={detail.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.src = FALLBACK_COVER }} />
@@ -105,7 +105,7 @@ export default function NovelDetailPage() {
             {detail.status && <span>· {detail.status}</span>}
             {detail.score && <span className="inline-flex items-center gap-1 text-amber-500"><Star className="h-4 w-4" fill="currentColor" />{detail.score}</span>}
           </div>
-          <h1 className="text-3xl font-black text-[var(--text-primary)]">{detail.name}</h1>
+          <h1 className="text-2xl font-black text-[var(--text-primary)] sm:text-3xl">{detail.name}</h1>
           <div className="mt-4 space-y-2 text-sm text-[var(--text-secondary)]">
             {detail.author && <p><span className="text-[var(--text-muted)]">作者：</span>{detail.author}</p>}
             {detail.wordCount && <p><span className="text-[var(--text-muted)]">字数：</span>{Number(detail.wordCount).toLocaleString()} 字</p>}
@@ -126,8 +126,8 @@ export default function NovelDetailPage() {
         </div>
       </section>
 
-      <section className="mt-8 rounded-[1.75rem] border border-black/5 dark:border-white/10 bg-white/65 dark:bg-stone-950/35 p-4 shadow-sm">
-        <div className="mb-5 flex items-center justify-between gap-3">
+      <section className="mt-8 rounded-[1.5rem] border border-black/5 dark:border-white/10 bg-white/65 dark:bg-stone-950/35 p-3 shadow-sm sm:rounded-[1.75rem] sm:p-4">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-black text-[var(--text-primary)]">章节目录</h2>
           <span className="text-sm text-[var(--text-muted)]">共 {detail.chapters.length.toLocaleString()} 章</span>
         </div>

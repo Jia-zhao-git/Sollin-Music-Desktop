@@ -88,8 +88,8 @@ export default function OnlineAlbumDetail() {
           返回
         </button>
 
-        <div className="flex items-start gap-6">
-          <div className="w-40 h-40 rounded-2xl overflow-hidden bg-gradient-to-br from-primary-500 to-pink-500 flex-shrink-0 shadow-lg">
+        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:gap-6 sm:text-left">
+          <div className="h-36 w-36 flex-shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-primary-500 to-pink-500 shadow-lg sm:h-40 sm:w-40">
             {albumDetail.cover ? (
               <CoverImage
                 src={albumDetail.cover}
@@ -113,9 +113,9 @@ export default function OnlineAlbumDetail() {
               </span>
             </div>
 
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <h1 className="text-3xl font-bold min-w-0 truncate">{albumDetail.name}</h1>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="mb-2 flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h1 className="min-w-0 text-2xl font-bold sm:text-3xl sm:truncate">{albumDetail.name}</h1>
+              <div className="flex flex-wrap items-center justify-center gap-1.5 flex-shrink-0 sm:justify-end">
                 <button onClick={handlePlayAll} className="btn-primary gap-1.5">
                   <Play className="w-4 h-4" />
                   播放
@@ -123,8 +123,8 @@ export default function OnlineAlbumDetail() {
                 <ExpandableSearch value={searchQuery} onChange={setSearchQuery} />
               </div>
             </div>
-            <p className="text-lg text-[var(--text-secondary)] mb-2">{albumDetail.artist || '未知歌手'}</p>
-            <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--text-muted)] mb-5">
+            <p className="mb-2 text-base text-[var(--text-secondary)] sm:text-lg">{albumDetail.artist || '未知歌手'}</p>
+            <div className="mb-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-[var(--text-muted)] sm:justify-start">
               <span>{albumDetail.songs.length} 首歌曲</span>
               {albumDetail.releaseDate && (
                 <span>{new Date(albumDetail.releaseDate).toLocaleDateString('zh-CN')}</span>

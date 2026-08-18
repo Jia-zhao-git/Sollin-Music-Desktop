@@ -107,8 +107,8 @@ export default function AlbumDetail() {
             </button>
 
             {/* Album header */}
-            <div className="flex gap-6 mb-8">
-                <div className="w-56 h-56 rounded-2xl overflow-hidden flex-shrink-0 shadow-xl">
+            <div className="mb-8 flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:gap-6 sm:text-left">
+                <div className="h-40 w-40 flex-shrink-0 overflow-hidden rounded-2xl shadow-xl sm:h-56 sm:w-56">
                     <CoverImage
                         src={album.cover}
                         alt={album.name}
@@ -117,14 +117,14 @@ export default function AlbumDetail() {
                 </div>
                 <div className="flex-1 flex flex-col justify-center">
                     <span className="text-xs text-red-500 font-medium mb-1">专辑</span>
-                    <h1 className="text-3xl font-bold mb-2">{album.name}</h1>
+                    <h1 className="mb-2 text-2xl font-bold sm:text-3xl">{album.name}</h1>
                     <button
                         onClick={() => album.artistId && navigate(`/artist/${album.artistId}`)}
                         className="text-[var(--text-muted)] hover:text-red-500 transition-colors mb-4 text-left"
                     >
                         {album.artist}
                     </button>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--text-muted)] mb-4">
+                    <div className="mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-[var(--text-muted)] sm:justify-start">
                         {album.publishTime && (
                             <span className="flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
@@ -140,7 +140,7 @@ export default function AlbumDetail() {
                         <span>{songs.length} 首歌曲</span>
                         <span>{getTotalDuration()}</span>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
                         <button
                             onClick={playAll}
                             className="btn-primary gap-1.5"

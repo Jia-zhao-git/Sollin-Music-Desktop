@@ -1,0 +1,132 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type"
+        type: choice
+        options:
+          - debug
+          - release
+        default: debug
+      target:
+        description: "Target (mobile or tv)"
+        type: choice
+        options:
+          - mobile
+          - tv
+          - both
+        default: mobile
+      publish_release:
+        description: "Upload APK to GitHub Release"
+        type: boolean
+        required: false
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "20"
+  JAVA_VERSION: "17"
+
+jobs:
+  build-android:
+    name: Android APK (${{ github.event.inputs.target || 'mobile' }} / ${{ github.event.inputs.build_type || 'debug' }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: ${{ github.event_name == 'push' && fromJson('["mobile","tv"]') || (github.event.inputs.target == 'both' && fromJson('["mobile","tv"]') || fromJson(format('["{0}"]', github.event.inputs.target || 'mobile'))) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets (${{ matrix.target }})
+        run: npm run build:${{ matrix.target }}
+
+      - name: Sync Capacitor
+        run: CAPACITOR_WEB_DIR=dist-${{ matrix.target }} npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        if: github.event.inputs.build_type != 'release' && github.event_name != 'push'
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Build release APK
+        if: github.event.inputs.build_type == 'release' || github.event_name == 'push'
+        working-directory: android
+        env:
+          CAPACITOR_ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_PATH }}
+          CAPACITOR_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CAPACITOR_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CAPACITOR_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Rename APK
+        run: |
+          BUILD_TYPE=${{ (github.event.inputs.build_type == 'release' || github.event_name == 'push') && 'release' || 'debug' }}
+          mkdir -p apk-output
+          find android/app/build/outputs/apk -name "*.apk" -exec cp {} apk-output/jiamusic-${{ matrix.target }}-${BUILD_TYPE}.apk \;
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jiamusic-android-${{ matrix.target }}
+          path: apk-output/*.apk
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+    needs: build-android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: resolve_tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="manual-android-${GITHUB_RUN_ID}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Upload APKs to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.resolve_tag.outputs.tag }}
+          make_latest: false
+          files: artifacts/**/*.apk

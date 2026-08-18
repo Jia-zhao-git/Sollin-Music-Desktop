@@ -24,11 +24,14 @@ import {
   LocateFixed,
   Volume2,
   VolumeX,
+  Home,
+  Film,
+  BookOpen,
 } from 'lucide-react'
 import * as Slider from '@radix-ui/react-slider'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useUserStore } from '@/stores/userStore'
 import { formatTime } from '@/utils/format'
 import type { PlayMode } from '@/types'
@@ -73,6 +76,77 @@ const LYRICS_OPTION_STORAGE_KEYS = {
   translation: 'lyrics-show-translation',
   roman: 'lyrics-show-roman',
 } as const
+
+const useResponsiveViewport = () => {
+  const getSnapshot = () => {
+    if (typeof window === 'undefined') return { isCompact: false, isTvLike: false }
+    return {
+      isCompact: window.matchMedia('(max-width: 767px)').matches,
+      isTvLike: window.matchMedia('(min-width: 1280px) and (pointer: coarse)').matches,
+    }
+  }
+
+  const [viewport, setViewport] = useState(getSnapshot)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const compactMedia = window.matchMedia('(max-width: 767px)')
+    const tvMedia = window.matchMedia('(min-width: 1280px) and (pointer: coarse)')
+    const update = () => setViewport(getSnapshot())
+
+    compactMedia.addEventListener?.('change', update)
+    tvMedia.addEventListener?.('change', update)
+    window.addEventListener('resize', update)
+    update()
+
+    return () => {
+      compactMedia.removeEventListener?.('change', update)
+      tvMedia.removeEventListener?.('change', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  return viewport
+}
+
+function MobileBottomNav() {
+  const setShowSettingsModal = useUIStore((s) => s.setShowSettingsModal)
+  const items = [
+    { icon: Home, label: '音乐', to: '/' },
+    { icon: Film, label: '影视', to: '/video' },
+    { icon: BookOpen, label: '小说', to: '/novel' },
+    { icon: Heart, label: '收藏', to: '/favorites' },
+  ]
+
+  return (
+    <nav className="mobile-bottom-nav fixed inset-x-0 bottom-20 z-40 border-t border-black/5 bg-[var(--panel-bg)] px-2 pb-[env(safe-area-inset-bottom)] pt-1.5 backdrop-blur-xl dark:border-white/10 md:hidden">
+      <div className="grid grid-cols-5 gap-1">
+        {items.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) => cn(
+              'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-medium text-[var(--text-muted)] transition-colors',
+              isActive && 'bg-primary-500/12 text-primary-500',
+            )}
+          >
+            <item.icon className="h-5 w-5" />
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          onClick={() => setShowSettingsModal(true)}
+          className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-medium text-[var(--text-muted)] transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+        >
+          <Settings className="h-5 w-5" />
+          <span>设置</span>
+        </button>
+      </div>
+    </nav>
+  )
+}
 
 type LyricDisplayOptions = {
   word: boolean
@@ -222,6 +296,7 @@ export default function Layout() {
   )
   const backgroundTextureSrc = appResolvedBg.textureSrc || coverBackdrop.textureSrc || currentSong?.cover || null
   const lyricsTextureSrc = lyricsResolvedBg.textureSrc || coverBackdrop.textureSrc || currentSong?.cover || null
+  const { isCompact, isTvLike } = useResponsiveViewport()
   const mainScrollRef = useRef<HTMLElement | null>(null)
   const setHomeScrollTop = useUIStore((s) => s.setHomeScrollTop)
 
@@ -444,7 +519,12 @@ export default function Layout() {
 
   return (
     <>
-      <div className={cn('flex flex-col h-screen overflow-hidden relative', isMiniMode && 'hidden')}>
+      <div className={cn(
+        'flex h-screen flex-col overflow-hidden relative',
+        isMiniMode && 'hidden',
+        isCompact && 'app-compact-viewport',
+        isTvLike && 'app-tv-viewport',
+      )}>
         <BackgroundLayer
           resolvedBg={appResolvedBg}
           textureSrc={backgroundTextureSrc}
@@ -460,19 +540,19 @@ export default function Layout() {
         {/* Top bar with search */}
         <div className={cn(
           'relative z-30 transition-[margin] duration-300',
-          sidebarCollapsed ? 'ml-20' : 'ml-56'
+          !isCompact && (sidebarCollapsed ? 'ml-20' : 'ml-56')
         )}>
           <TopBar />
         </div>
 
         <div className="flex flex-1 overflow-hidden relative">
           {/* Sidebar */}
-          <Sidebar />
+          {!isCompact && <Sidebar />}
 
           {/* Main content */}
           <div className={cn(
             'flex-1 min-w-0 relative transition-[margin] duration-300',
-            sidebarCollapsed ? 'ml-20' : 'ml-56'
+            !isCompact && (sidebarCollapsed ? 'ml-20' : 'ml-56')
           )}>
             <div
               className="absolute inset-0 bg-[var(--panel-bg)]"
@@ -481,7 +561,7 @@ export default function Layout() {
               ref={mainScrollRef}
               className="app-content-scroll relative overflow-y-auto h-full"
             >
-            <div className="p-6 pt-2 pb-20">
+            <div className={cn('px-4 pb-32 pt-2 sm:p-6 sm:pt-2 sm:pb-20', isCompact && 'pb-36')}>
               <AnimatedOutlet />
             </div>
           </main>
@@ -489,11 +569,13 @@ export default function Layout() {
 
           {/* Queue panel - floating */}
           {showQueuePanel && (
-            <div className="fixed right-4 top-20 bottom-28 w-96 rounded-2xl border border-gray-200/50 dark:border-gray-800/50 bg-white/90 dark:bg-[#1c1c1e]/90 backdrop-blur-xl overflow-y-auto overflow-x-hidden shadow-2xl z-40">
+            <div className="fixed inset-x-3 bottom-40 top-20 rounded-2xl border border-gray-200/50 bg-white/90 shadow-2xl backdrop-blur-xl dark:border-gray-800/50 dark:bg-[#1c1c1e]/90 sm:left-auto sm:right-4 sm:bottom-28 sm:w-96 overflow-y-auto overflow-x-hidden z-40">
               <QueuePanel />
             </div>
           )}
         </div>
+
+        <MobileBottomNav />
 
         {/* Player bar - fixed at bottom, wrapper provides spacing */}
         <div className="relative z-10 h-20 flex-shrink-0">

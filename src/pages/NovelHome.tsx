@@ -311,7 +311,7 @@ export default function NovelHome() {
 
   return (
     <div className="pb-10">
-      <section className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-stone-950 px-6 py-8 text-white shadow-2xl mb-8">
+      <section className="relative overflow-hidden rounded-[1.5rem] border border-white/15 bg-stone-950 px-4 py-6 text-white shadow-2xl mb-6 sm:rounded-[2rem] sm:px-6 sm:py-8 sm:mb-8">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_5%,rgba(245,158,11,.34),transparent_32%),radial-gradient(circle_at_90%_10%,rgba(120,53,15,.38),transparent_30%),linear-gradient(135deg,rgba(28,25,23,.98),rgba(12,10,9,.99))]" />
         <div className="relative z-10 max-w-3xl">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm backdrop-blur">
@@ -319,7 +319,7 @@ export default function NovelHome() {
             在线小说 · 七猫 / 菠萝猫
           </div>
           <h1 className="text-3xl md:text-5xl font-black tracking-tight">翻开一座随身书库</h1>
-          <p className="mt-3 text-white/70 max-w-2xl">独立小说模块，支持书源切换、搜索、详情目录和章节阅读。默认优先使用七猫官方 API。</p>
+          <p className="mt-3 text-sm leading-6 text-white/70 max-w-2xl sm:text-base">独立小说模块，支持书源切换、搜索、详情目录和章节阅读。默认优先使用七猫官方 API。</p>
           <form onSubmit={submitSearch} className="mt-6 flex max-w-xl items-center gap-2 rounded-2xl bg-white/12 p-2 backdrop-blur-xl border border-white/10">
             <Search className="ml-2 h-5 w-5 text-white/55" />
             <input
@@ -345,7 +345,7 @@ export default function NovelHome() {
           <MiniRail title="继续阅读" icon={<Clock3 className="h-5 w-5 text-amber-500" />} items={history.map((item) => item.novel)} />
           <MiniRail title="我的书架" icon={<Heart className="h-5 w-5 text-amber-500" fill="currentColor" />} items={favorites} />
 
-          <section className="rounded-[1.75rem] border border-black/5 dark:border-white/10 bg-white/55 dark:bg-stone-950/35 p-4 shadow-sm">
+          <section className="rounded-[1.5rem] border border-black/5 dark:border-white/10 bg-white/55 dark:bg-stone-950/35 p-3 shadow-sm sm:rounded-[1.75rem] sm:p-4">
             <div className="mb-4 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <LibraryBig className="h-5 w-5 text-amber-500" />
@@ -395,7 +395,7 @@ export default function NovelHome() {
         </div>
       )}
 
-      <section className="rounded-[1.75rem] border border-black/5 dark:border-white/10 bg-white/65 dark:bg-stone-950/35 p-4 shadow-sm">
+      <section className="rounded-[1.5rem] border border-black/5 dark:border-white/10 bg-white/65 dark:bg-stone-950/35 p-3 shadow-sm sm:rounded-[1.75rem] sm:p-4">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <LibraryBig className="h-5 w-5 text-amber-500" />
@@ -437,7 +437,7 @@ export default function NovelHome() {
           <div className="grid h-[40vh] place-items-center"><Loader2 className="h-8 w-8 animate-spin text-amber-500" /></div>
         ) : (
           <>
-            <div className={cn('grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4', loading && 'opacity-60 pointer-events-none')}>
+            <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 sm:gap-4', loading && 'opacity-60 pointer-events-none')}>
               {(result?.list || []).map((item, index) => <NovelCard key={item.id} item={item} priority={index < 8} />)}
             </div>
 

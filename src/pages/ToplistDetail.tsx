@@ -113,26 +113,26 @@ export default function ToplistDetail() {
           <span>返回</span>
         </button>
 
-        <div className="flex items-start gap-6">
+        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:gap-6 sm:text-left">
           <div className="flex-shrink-0">
             {coverSrc ? (
               <CoverImage
                 src={coverSrc}
                 fallback={coverFallback}
                 alt={toplist?.name || '榜单封面'}
-                className="w-48 h-48 rounded-2xl shadow-xl"
+                className="h-36 w-36 rounded-2xl shadow-xl sm:h-48 sm:w-48"
               />
             ) : (
-              <div className="w-48 h-48 rounded-2xl bg-gradient-to-br from-primary-400 to-pink-400 shadow-xl" />
+              <div className="h-36 w-36 rounded-2xl bg-gradient-to-br from-primary-400 to-pink-400 shadow-xl sm:h-48 sm:w-48" />
             )}
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <h1 className="text-3xl font-bold min-w-0 truncate">
+            <div className="mb-2 flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h1 className="min-w-0 text-2xl font-bold sm:text-3xl sm:truncate">
                 {toplist?.name || '排行榜'}
               </h1>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex flex-wrap items-center justify-center gap-1.5 flex-shrink-0 sm:justify-end">
                 <button
                   onClick={handlePlayAll}
                   disabled={allApiSongs.length === 0}

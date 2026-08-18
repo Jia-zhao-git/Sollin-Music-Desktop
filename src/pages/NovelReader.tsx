@@ -895,13 +895,13 @@ export default function NovelReaderPage() {
   const canGoNext = mode === 'scroll' ? true : (Boolean(nextChapter) || currentReaderPage < pages.length)
 
   return (
-    <div className="pb-10 max-w-5xl mx-auto">
-      <div className="sticky top-0 z-20 -mx-2 mb-4 rounded-b-3xl border-x border-b border-black/5 bg-[var(--bg-primary)]/88 px-2 py-3 backdrop-blur-xl dark:border-white/10">
+    <div className="pb-10 mx-auto max-w-5xl">
+      <div className="sticky top-0 z-20 -mx-2 mb-4 rounded-b-3xl border-x border-b border-black/5 bg-[var(--bg-primary)]/88 px-2 py-3 backdrop-blur-xl dark:border-white/10 sm:-mx-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button onClick={goBackToDetail} className="flex items-center gap-2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors">
             <ArrowLeft className="h-5 w-5" />返回目录
           </button>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button onClick={() => setShowToc((value) => !value)} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold', showToc ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>
               <List className="h-4 w-4" /> 目录
             </button>
@@ -958,7 +958,7 @@ export default function NovelReaderPage() {
       </div>
 
       <section className="overflow-hidden rounded-[1.75rem] border border-black/5 shadow-sm dark:border-white/10" style={{ backgroundColor: themeStyle.bg }}>
-        <div className="border-b border-black/5 px-6 py-5 dark:border-white/10" style={{ color: themeStyle.sub }}>
+        <div className="border-b border-black/5 px-4 py-4 dark:border-white/10 sm:px-6 sm:py-5" style={{ color: themeStyle.sub }}>
           <p className="text-sm">{detail.name} · {detail.author || detail.sourceName}</p>
           <h1 className="mt-1 text-2xl font-black" style={{ color: themeStyle.text }}>{title || '正文'}</h1>
           <p className="mt-2 text-xs">
@@ -973,7 +973,7 @@ export default function NovelReaderPage() {
           {mode === 'paged' && <button aria-label="下一页" onClick={nextPage} disabled={!canGoNext} className="absolute inset-y-0 right-0 z-10 w-1/5 disabled:pointer-events-none" />}
           {mode === 'paged' ? (
             <article
-              className={cn('mx-auto min-h-[58vh] px-6 py-8 font-serif sm:px-10', WIDTH_CLASS[contentWidth])}
+              className={cn('mx-auto min-h-[58vh] px-4 py-6 font-serif sm:px-10 sm:py-8', WIDTH_CLASS[contentWidth])}
               style={{ fontSize, lineHeight, color: themeStyle.text, whiteSpace: 'pre-wrap' }}
             >
               {pages[currentReaderPage - 1] || '暂无内容'}
@@ -987,7 +987,7 @@ export default function NovelReaderPage() {
                   <section
                     key={chapter.id}
                     ref={(node) => { if (node) sectionRefs.current.set(chapter.id, node); else sectionRefs.current.delete(chapter.id) }}
-                    className="border-b border-black/5 px-6 py-7 last:border-b-0 dark:border-white/10 sm:px-10"
+                    className="border-b border-black/5 px-4 py-6 last:border-b-0 dark:border-white/10 sm:px-10 sm:py-7"
                     style={{ fontSize, lineHeight, color: themeStyle.text, whiteSpace: 'pre-wrap' }}
                   >
                     <h2 className="mb-4 text-xl font-black" style={{ color: themeStyle.text }}>{chapter.title}</h2>
@@ -999,7 +999,7 @@ export default function NovelReaderPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/5 px-6 py-5 dark:border-white/10">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/5 px-4 py-4 dark:border-white/10 sm:px-6 sm:py-5">
           <button onClick={prevPage} disabled={!canGoPrev} className="inline-flex items-center gap-2 rounded-full border border-black/10 px-4 py-2 text-sm font-semibold disabled:opacity-40 dark:border-white/10" style={{ color: themeStyle.text }}>
             <ChevronLeft className="h-4 w-4" /> 上一页/章
           </button>
@@ -1027,7 +1027,7 @@ export default function NovelReaderPage() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'tween', duration: 0.25 }}
-              className="fixed inset-y-0 right-0 z-40 flex w-[88%] max-w-sm flex-col border-l border-black/10 bg-[var(--bg-primary)] shadow-2xl dark:border-white/10"
+              className="fixed inset-y-0 right-0 z-40 flex w-[92%] max-w-sm flex-col border-l border-black/10 bg-[var(--bg-primary)] shadow-2xl dark:border-white/10 sm:w-[88%]"
             >
               <div className="flex items-center justify-between gap-2 border-b border-black/10 px-4 py-3 dark:border-white/10">
                 <h2 className="text-lg font-black text-[var(--text-primary)]">目录</h2>
@@ -1128,7 +1128,7 @@ export default function NovelReaderPage() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'tween', duration: 0.25 }}
-              className="fixed inset-y-0 right-0 z-40 flex w-[88%] max-w-sm flex-col border-l border-black/10 bg-[var(--bg-primary)] shadow-2xl dark:border-white/10"
+              className="fixed inset-y-0 right-0 z-40 flex w-[92%] max-w-sm flex-col border-l border-black/10 bg-[var(--bg-primary)] shadow-2xl dark:border-white/10 sm:w-[88%]"
             >
               <div className="flex items-center justify-between gap-2 border-b border-black/10 px-4 py-3 dark:border-white/10">
                 <h2 className="text-lg font-black text-[var(--text-primary)]">书签 / 笔记</h2>

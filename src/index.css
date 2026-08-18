@@ -319,6 +319,41 @@
     backdrop-filter: none !important;
   }
 
+  @media (max-width: 767px) {
+    .app-compact-viewport .app-content-scroll {
+      height: calc(100vh - 14rem);
+      padding-bottom: calc(env(safe-area-inset-bottom) + 8.75rem);
+    }
+
+    .app-compact-viewport .song-row {
+      gap: 0.75rem;
+      min-height: 58px;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+
+    .app-compact-viewport .btn-icon {
+      min-width: 2.25rem;
+      min-height: 2.25rem;
+    }
+  }
+
+  @media (min-width: 1280px) and (pointer: coarse) {
+    .app-tv-viewport .sidebar-item,
+    .app-tv-viewport .btn-icon,
+    .app-tv-viewport button,
+    .app-tv-viewport a {
+      min-height: 44px;
+    }
+
+    .app-tv-viewport .card,
+    .app-tv-viewport .glass-card,
+    .app-tv-viewport button,
+    .app-tv-viewport a {
+      scroll-margin: 5rem;
+    }
+  }
+
   /* Animation */
   .animate-spin-slow {
     animation: spin 8s linear infinite;

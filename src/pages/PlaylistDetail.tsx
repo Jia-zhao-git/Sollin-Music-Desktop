@@ -93,8 +93,8 @@ export default function PlaylistDetail() {
       </button>
 
       {/* Header */}
-      <div className="flex items-end gap-6">
-        <div className="w-48 h-48 rounded-2xl overflow-hidden bg-gradient-to-br from-primary-500 to-pink-500 shadow-xl flex-shrink-0">
+      <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-end sm:gap-6 sm:text-left">
+        <div className="h-36 w-36 flex-shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-primary-500 to-pink-500 shadow-xl sm:h-48 sm:w-48">
           {(playlist.cover || playlist.songs[0]?.cover) ? (
             <CoverImage
               src={playlist.cover || playlist.songs[0]?.cover}
@@ -110,20 +110,20 @@ export default function PlaylistDetail() {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm text-[var(--text-muted)] mb-1">歌单</p>
-          <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 mb-3">
             {isEditing ? (
               <input
                 type="text"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                className="input text-3xl font-bold min-w-0"
+                className="input min-w-0 text-2xl font-bold sm:text-3xl"
                 autoFocus
                 onBlur={() => setIsEditing(false)}
               />
             ) : (
-              <h1 className="text-4xl font-bold min-w-0 truncate">{playlist.name}</h1>
+              <h1 className="min-w-0 text-2xl font-bold sm:text-4xl sm:truncate">{playlist.name}</h1>
             )}
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex flex-wrap items-center justify-center gap-1.5 flex-shrink-0 sm:justify-end">
               <button
                 onClick={handlePlayAll}
                 disabled={playlist.songs.length === 0}
@@ -177,7 +177,7 @@ export default function PlaylistDetail() {
           {playlist.description && (
             <p className="text-[var(--text-muted)] mb-2">{playlist.description}</p>
           )}
-          <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+          <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-[var(--text-muted)] sm:justify-start">
             <span>{playlist.songCount} 首歌曲</span>
             <span>·</span>
             <span>{formatDuration(totalDuration)}</span>

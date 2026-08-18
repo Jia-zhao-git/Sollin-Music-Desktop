@@ -21,6 +21,29 @@ const normalizeHeaders = (headers: Headers): Record<string, string> => {
   return result
 }
 
+const canUseDevProxy = () => {
+  if (typeof window === 'undefined') return false
+  if (!import.meta.env.DEV) return false
+  return window.location.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+}
+
+const toDevProxyUrl = (url: string) => `/__dev_http_proxy?url=${encodeURIComponent(url)}`
+
+const fetchInBrowser = async (options: HttpRequestOptions, useDevProxy = false): Promise<HttpResponse> => {
+  const response = await fetch(useDevProxy ? toDevProxyUrl(options.url) : options.url, {
+    method: options.method || 'GET',
+    headers: options.headers,
+    body: options.body,
+    signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
+  })
+
+  return {
+    status: response.status,
+    headers: normalizeHeaders(response.headers),
+    bodyText: await response.text(),
+  }
+}
+
 export const httpClient = {
   async request(options: HttpRequestOptions): Promise<HttpResponse> {
     const electronApi = typeof window !== 'undefined' ? (window.electronAPI as any) : undefined
@@ -28,17 +51,11 @@ export const httpClient = {
       return electronApi.httpRequest(options)
     }
 
-    const response = await fetch(options.url, {
-      method: options.method || 'GET',
-      headers: options.headers,
-      body: options.body,
-      signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
-    })
-
-    return {
-      status: response.status,
-      headers: normalizeHeaders(response.headers),
-      bodyText: await response.text(),
+    try {
+      return await fetchInBrowser(options)
+    } catch (error) {
+      if (!canUseDevProxy()) throw error
+      return fetchInBrowser(options, true)
     }
   },
 

@@ -744,7 +744,7 @@ export default function VideoDetailPage() {
             }
             if (dl && (dl.status === 'downloading' || dl.status === 'pending')) {
               return (
-                <div className="flex flex-1 items-center gap-3 min-w-[220px]">
+                <div className="flex min-w-[min(100%,220px)] flex-1 items-center gap-3">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
                     <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${dl.progress}%` }} />
                   </div>
@@ -762,7 +762,7 @@ export default function VideoDetailPage() {
         </div>
       )}
 
-      <section className="mt-6 grid gap-6 lg:grid-cols-[260px,1fr]">
+      <section className="mt-6 grid gap-4 lg:grid-cols-[260px,1fr] lg:gap-6">
         <div className="overflow-hidden rounded-[1.5rem] bg-white/70 dark:bg-gray-900/55 border border-black/5 dark:border-white/10 shadow-sm">
           <div className="aspect-[3/4] bg-gradient-to-br from-slate-800 via-zinc-900 to-black">
             <Poster src={detail.cover} title={detail.name} priority />
@@ -791,7 +791,7 @@ export default function VideoDetailPage() {
             {detail.area && <span>· {detail.area}</span>}
             {detail.score && <span className="inline-flex items-center gap-1 text-amber-500"><Star className="h-4 w-4" fill="currentColor" />{detail.score}</span>}
           </div>
-          <h1 className="text-3xl font-black text-[var(--text-primary)]">{detail.name}</h1>
+          <h1 className="text-2xl font-black text-[var(--text-primary)] sm:text-3xl">{detail.name}</h1>
           <p className="mt-2 text-red-500 font-medium">{detail.remarks}</p>
           <div className="mt-4 space-y-2 text-sm text-[var(--text-secondary)]">
             {detail.actors && <p><span className="text-[var(--text-muted)]">主演：</span>{detail.actors}</p>}
@@ -818,7 +818,7 @@ export default function VideoDetailPage() {
               ))}
             </div>
 
-            <div className="mb-3 flex items-center gap-2 rounded-xl bg-black/5 px-3 py-2 dark:bg-white/5 w-full max-w-xs">
+            <div className="mb-3 flex w-full items-center gap-2 rounded-xl bg-black/5 px-3 py-2 dark:bg-white/5 sm:max-w-xs">
               <Search className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
               <input
                 value={episodeQuery}
@@ -834,7 +834,7 @@ export default function VideoDetailPage() {
             {filteredEpisodes.length === 0 ? (
               <StatusState variant="empty" icon={SearchX} title="没有匹配的集数" description="试试调整搜索关键词或筛选条件" compact />
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
                 {filteredEpisodes.map((episode) => {
                   const playing = selectedEpisode?.url === episode.url
                   const watched = watchedEpisodeUrls.has(episode.url)

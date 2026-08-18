@@ -485,10 +485,10 @@ export default function TopBar() {
   const currentPlatformName = PLATFORM_OPTIONS.find((p) => p.id === searchPlatform)?.name || '全部'
 
   return (
-    <div className="drag-region h-14 flex items-center gap-4 px-6 bg-[var(--panel-bg)] border-b border-gray-200/30 dark:border-gray-800/50"
+    <div className="drag-region h-14 flex items-center gap-2 bg-[var(--panel-bg)] px-3 sm:gap-4 sm:px-6 border-b border-gray-200/30 dark:border-gray-800/50"
       style={{ backdropFilter: 'blur(var(--panel-backdrop-blur))' }}>
       {/* Search Box (with platform selector merged inside) */}
-      <form ref={searchFormRef} onSubmit={handleSearch} className="no-drag flex-1 max-w-xl relative">
+      <form ref={searchFormRef} onSubmit={handleSearch} className="no-drag min-w-0 flex-1 max-w-xl relative">
         <div
           className={cn(
             'relative flex items-center rounded-full transition-all duration-200',
@@ -644,10 +644,10 @@ export default function TopBar() {
       </form>
 
       {/* Spacer */}
-      <div className="flex-1" />
+      <div className="hidden flex-1 sm:block" />
 
       {/* Account Section */}
-      <div className="no-drag flex items-center gap-2">
+      <div className="no-drag flex shrink-0 items-center gap-1 sm:gap-2">
         <VersionStatusButton />
 
         {/* Netease Account */}
@@ -746,7 +746,7 @@ export default function TopBar() {
                 fill="white"
               />
             </svg>
-            <span className="text-sm font-medium text-red-500 dark:text-red-400">小芸账号登录</span>
+            <span className="hidden text-sm font-medium text-red-500 dark:text-red-400 sm:inline">小芸账号登录</span>
           </button>
         )}
 

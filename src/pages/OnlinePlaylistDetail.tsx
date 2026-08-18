@@ -197,8 +197,8 @@ export default function OnlinePlaylistDetail() {
           返回
         </button>
 
-        <div className="flex items-start gap-6">
-          <div className="w-40 h-40 rounded-2xl overflow-hidden bg-gradient-to-br from-primary-500 to-pink-500 flex-shrink-0 shadow-lg">
+        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:gap-6 sm:text-left">
+          <div className="h-36 w-36 flex-shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-primary-500 to-pink-500 shadow-lg sm:h-40 sm:w-40">
             {headerCover ? (
               <CoverImage
                 src={headerCover}
@@ -214,9 +214,9 @@ export default function OnlinePlaylistDetail() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <h1 className="text-3xl font-bold min-w-0 truncate">{playlistInfo?.name || '歌单'}</h1>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="mb-2 flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h1 className="min-w-0 text-2xl font-bold sm:text-3xl sm:truncate">{playlistInfo?.name || '歌单'}</h1>
+              <div className="flex flex-wrap items-center justify-center gap-1.5 flex-shrink-0 sm:justify-end">
                 <button
                   onClick={handlePlayAll}
                   disabled={allApiSongs.length === 0}

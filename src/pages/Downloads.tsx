@@ -170,7 +170,7 @@ export default function Downloads() {
                 <p className="font-medium">下载任务</p>
                 <p className="text-xs text-[var(--text-muted)] mt-1">从歌曲更多菜单点击“下载”后，任务会出现在这里</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => void handleClearAllDownloading()}
                   disabled={downloadingTaskCount === 0}
@@ -196,7 +196,7 @@ export default function Downloads() {
             </div>
 
             {downloadTasks.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 px-6 py-10 text-center text-sm text-[var(--text-muted)]">
+              <div className="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 px-4 py-8 text-center text-sm text-[var(--text-muted)] sm:px-6 sm:py-10">
                 还没有下载任务，去歌曲列表的更多菜单试试“下载”吧。
               </div>
             ) : (
@@ -261,7 +261,7 @@ export default function Downloads() {
                       保存目录：{task.filePath || task.targetDirectory}
                     </div>
 
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                       {task.filePath && (
                         <button
                           onClick={() => void handleShowDownloadedFile(task.filePath as string)}

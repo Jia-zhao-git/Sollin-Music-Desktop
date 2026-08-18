@@ -323,8 +323,8 @@ export default function NeteasePlaylistDetail() {
                     返回
                 </button>
 
-                <div className="flex items-center gap-6">
-                    <div className="w-24 h-24 rounded-2xl overflow-hidden bg-gradient-to-br from-red-500 to-pink-500 flex-shrink-0 shadow-lg">
+                <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:gap-6 sm:text-left">
+                    <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-red-500 to-pink-500 shadow-lg">
                         {displayCover ? (
                             <CoverImage
                                 src={displayCover}
@@ -339,11 +339,11 @@ export default function NeteasePlaylistDetail() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-3 mb-1">
-                            <h1 className="text-3xl font-bold min-w-0 truncate">
+                        <div className="mb-1 flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <h1 className="min-w-0 text-2xl font-bold sm:text-3xl sm:truncate">
                                 {displayName || '未知歌单'}
                             </h1>
-                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <div className="flex flex-wrap items-center justify-center gap-1.5 flex-shrink-0 sm:justify-end">
                                 <button
                                     onClick={handlePlayAll}
                                     disabled={allApiSongs.length === 0 || isLoading}
@@ -423,7 +423,7 @@ export default function NeteasePlaylistDetail() {
                                 {displayDescription}
                             </p>
                         )}
-                        <div className="flex items-center gap-2 mt-3">
+                        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                             <button
                                 onClick={handleIntelligenceMode}
                                 disabled={allApiSongs.length === 0 || isLoading || intelligenceLoading}
@@ -454,7 +454,7 @@ export default function NeteasePlaylistDetail() {
                 </div>
 
                 {isSelectMode && (
-                    <div className="flex items-center gap-4 mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-xl">
+                    <div className="flex flex-wrap items-center gap-3 mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-xl">
                         <button
                             onClick={toggleSelectAll}
                             className="text-sm text-primary-500 hover:text-primary-600"

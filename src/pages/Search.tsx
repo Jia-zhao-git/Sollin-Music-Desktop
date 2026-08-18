@@ -285,7 +285,7 @@ export default function Search() {
                     <h2 className="text-lg font-semibold">专辑</h2>
                     <span className="text-xs text-[var(--text-muted)]">{albums.length} 张</span>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 sm:gap-4">
                     {albums.map((album) => (
                       <motion.div
                         key={`${album.platform}-${album.id}`}
@@ -319,7 +319,7 @@ export default function Search() {
                     <h2 className="text-lg font-semibold">歌单</h2>
                     <span className="text-xs text-[var(--text-muted)]">{playlists.length} 个</span>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 sm:gap-4">
                     {playlists.map((playlist) => (
                       <motion.div
                         key={`${playlist.platform}-${playlist.id}`}

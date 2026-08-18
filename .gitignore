@@ -1,6 +1,8 @@
 /node_modules/
 /release/
 /dist/
+/dist-mobile/
+/dist-tv/
 /mobile/
 /dist-electron/
 .DS_Store

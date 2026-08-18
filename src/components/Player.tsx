@@ -454,7 +454,7 @@ export default function Player() {
   const selectablePlaylists = currentSong?.platform === 'local' ? localPlaylists : playlists
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-20 bg-[var(--panel-bg)] z-40"
+    <div className="fixed bottom-0 left-0 right-0 h-20 bg-[var(--panel-bg)] z-40 pb-[env(safe-area-inset-bottom)]"
       style={{ backdropFilter: 'blur(var(--panel-backdrop-blur))' }}>
       {/* Progress bar as top border */}
       <ProgressBarTop
@@ -475,9 +475,9 @@ export default function Player() {
           <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-white/14 via-transparent to-transparent dark:from-black/10 dark:via-transparent dark:to-transparent" />
         </div>
       )}
-      <div className="relative z-10 h-full flex items-center px-6 gap-4">
+      <div className="relative z-10 flex h-full items-center gap-2 px-3 sm:gap-4 sm:px-6">
         {/* Song info */}
-        <div className="flex items-stretch gap-3 w-80 min-w-0">
+        <div className="flex min-w-0 w-[min(46vw,18rem)] items-stretch gap-2 sm:w-80 sm:gap-3">
           {currentSong ? (
             <>
               <button
@@ -488,7 +488,7 @@ export default function Player() {
                 <CoverImage
                   src={currentSong.cover}
                   alt={currentSong.name}
-                  className="w-14 h-14 rounded-lg shadow-lg transition-transform hover:scale-105"
+                  className="h-12 w-12 rounded-lg shadow-lg transition-transform hover:scale-105 sm:h-14 sm:w-14"
                 />
                 <div
                   className="absolute bottom-1 right-1 w-2 h-2 rounded-full"
@@ -496,7 +496,7 @@ export default function Player() {
                   title={currentSong.platform}
                 />
               </button>
-              <div className="min-w-0 flex-1 h-14 flex flex-col justify-between pb-0.5">
+              <div className="min-w-0 flex-1 h-12 sm:h-14 flex flex-col justify-between pb-0.5">
                 <div ref={titleContainerRef} className="overflow-hidden whitespace-nowrap">
                   <span ref={titleTextRef} className="inline-block font-medium text-sm">
                     {currentSong.name} <span className="text-xs text-[var(--text-muted)] font-normal">- {currentSong.artist}</span>
@@ -504,13 +504,13 @@ export default function Player() {
                 </div>
                 <div className="flex items-center gap-1 min-w-0">
                   <PlaybackQualityMenu
-                    triggerClassName="h-5 min-w-[3.5rem] px-2 text-[10px] bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-500/15 dark:text-primary-200 dark:hover:bg-primary-500/25"
+                    triggerClassName="hidden h-5 min-w-[3.5rem] px-2 text-[10px] bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-500/15 dark:text-primary-200 dark:hover:bg-primary-500/25 sm:inline-flex"
                     contentClassName="z-[90]"
                     side="top"
                     align="start"
                   />
                   {currentQuality && currentQuality !== quality && !manualQualityOverride && (
-                    <span className="px-2 py-0.5 text-[10px] rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                    <span className="hidden px-2 py-0.5 text-[10px] rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 sm:inline-flex">
                       已自动降级
                     </span>
                   )}
@@ -529,7 +529,7 @@ export default function Player() {
                           <span className="text-[11px] text-[var(--text-secondary)]">{sourceSwitch}</span>
                         }
                       >
-                        <span className="px-2 py-0.5 text-[10px] rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 truncate cursor-help">
+                        <span className="hidden px-2 py-0.5 text-[10px] rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 truncate cursor-help sm:inline-flex">
                           临时换源
                         </span>
                       </Tooltip>
@@ -564,10 +564,10 @@ export default function Player() {
         </div>
 
         {/* Player controls */}
-        <div className="flex-1 flex flex-col items-center gap-1 max-w-2xl mx-auto">
+        <div className="flex min-w-0 flex-1 flex-col items-center gap-1 sm:max-w-2xl sm:mx-auto">
           {/* 歌词行 */}
           {currentSong && parsedLyrics.length > 0 && (
-            <div className="w-full flex items-center justify-between px-8 h-5">
+            <div className="hidden w-full items-center justify-between px-8 h-5 sm:flex">
               <span className="text-xs font-semibold text-[var(--text-primary)] truncate max-w-[40%]">
                 {currentLyricIndex >= 0 ? parsedLyrics[currentLyricIndex]?.text || '' : ''}
               </span>
@@ -579,10 +579,10 @@ export default function Player() {
             </div>
           )}
           {/* Control buttons */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-4">
             <button
               onClick={handleFavoriteClick}
-              className="btn-icon"
+              className="btn-icon hidden sm:inline-flex"
               disabled={!currentSong}
             >
               <Heart
@@ -596,7 +596,7 @@ export default function Player() {
             <button
               onClick={handlePlayModeChange}
               className={cn(
-                'btn-icon',
+                'btn-icon hidden sm:inline-flex',
                 playMode !== 'sequence' && 'text-primary-500'
               )}
               title={getPlayModeTooltip()}
@@ -633,7 +633,7 @@ export default function Player() {
 
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
-                <button className="btn-icon" disabled={!currentSong}>
+                <button className="btn-icon hidden sm:inline-flex" disabled={!currentSong}>
                   <ListPlus className="w-5 h-5" />
                 </button>
               </DropdownMenu.Trigger>
@@ -669,7 +669,7 @@ export default function Player() {
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
 
-            <button onClick={toggleLyricsPanel} className="btn-icon" disabled={!currentSong}>
+            <button onClick={toggleLyricsPanel} className="btn-icon hidden sm:inline-flex" disabled={!currentSong}>
               <Mic2 className="w-4 h-4" />
             </button>
 
@@ -679,7 +679,7 @@ export default function Player() {
                 onClick={handleIntelligenceMode}
                 disabled={!currentSong || intelligenceLoading}
                 className={cn(
-                  'btn-icon relative',
+                  'btn-icon relative hidden sm:inline-flex',
                   isIntelligenceMode && 'text-pink-500 bg-pink-500/10'
                 )}
                 title={isIntelligenceMode ? '关闭心动模式' : '开启心动模式'}
@@ -698,7 +698,7 @@ export default function Player() {
         </div>
 
         {/* Right controls */}
-        <div className="flex items-center gap-2 w-64 justify-end">
+        <div className="hidden items-center gap-2 w-64 justify-end md:flex">
           {/* Volume */}
           <div
             className="relative flex items-center"

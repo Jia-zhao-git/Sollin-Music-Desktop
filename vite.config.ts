@@ -1,9 +1,69 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import http from 'http'
+import https from 'https'
+import { URL } from 'url'
+
+const DEV_HTTP_PROXY_PATH = '/__dev_http_proxy'
+
+const DEV_PROXY_BLOCKED_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1'])
+
+const writeProxyError = (res: Connect.ServerResponse, status: number, message: string) => {
+  res.statusCode = status
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.end(message)
+}
+
+const installDevHttpProxy = (): NonNullable<ReturnType<typeof defineConfig>['plugins']>[number] => ({
+  name: 'sollin-dev-http-proxy',
+  apply: 'serve',
+  configureServer(server) {
+    server.middlewares.use(DEV_HTTP_PROXY_PATH, (req, res) => {
+      const requestUrl = new URL(req.url || '', 'http://localhost')
+      const target = requestUrl.searchParams.get('url')
+      if (!target) return writeProxyError(res, 400, 'Missing proxy target url')
+
+      let targetUrl: URL
+      try {
+        targetUrl = new URL(target)
+      } catch {
+        return writeProxyError(res, 400, 'Invalid proxy target url')
+      }
+
+      if (!['http:', 'https:'].includes(targetUrl.protocol)) {
+        return writeProxyError(res, 400, 'Unsupported proxy protocol')
+      }
+      if (DEV_PROXY_BLOCKED_HOSTS.has(targetUrl.hostname)) {
+        return writeProxyError(res, 403, 'Proxy target host is blocked')
+      }
+
+      const client = targetUrl.protocol === 'https:' ? https : http
+      const upstreamReq = client.request(targetUrl, {
+        method: req.method || 'GET',
+        headers: {
+          ...req.headers,
+          host: targetUrl.host,
+          origin: targetUrl.origin,
+          referer: targetUrl.origin + '/',
+        },
+      }, (upstreamRes) => {
+        res.statusCode = upstreamRes.statusCode || 200
+        Object.entries(upstreamRes.headers).forEach(([key, value]) => {
+          if (value !== undefined) res.setHeader(key, value)
+        })
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        upstreamRes.pipe(res)
+      })
+
+      upstreamReq.on('error', (error) => writeProxyError(res, 502, error.message || 'Proxy request failed'))
+      req.pipe(upstreamReq)
+    })
+  },
+})
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), installDevHttpProxy()],
   base: './',
   resolve: {
     alias: {

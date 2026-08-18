@@ -345,7 +345,7 @@ export default function PlaylistExplore() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 sm:gap-4">
             {playlists.map((playlist) => (
               <div
                 key={`${playlist.platform}-${playlist.id}`}
@@ -374,7 +374,7 @@ export default function PlaylistExplore() {
           </div>
 
           {playlists.length > 0 && (page > 1 || pageInfo.hasMore || totalPages > 1) && (
-            <div className="flex items-center justify-center gap-2 mt-8">
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-8">
               <button
                 onClick={() => updateRoute({ page: page - 1 })}
                 disabled={page <= 1}

@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build && npm run electron:compile",
     "build:web": "tsc && vite build",
+    "build:mobile": "tsc && cross-env VITE_APP_TARGET=mobile vite build --outDir dist-mobile",
+    "build:tv": "tsc && cross-env VITE_APP_TARGET=tv vite build --outDir dist-tv",
     "package": "npm run build && electron-builder",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:dev": "npm run electron:compile && concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
@@ -19,7 +21,13 @@
     "electron:build:win:x64": "npm run build && electron-builder --win --x64",
     "electron:build:linux:x64": "npm run build && electron-builder --linux --x64",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "cap:sync:mobile": "cross-env CAPACITOR_WEB_DIR=dist-mobile npx cap sync android",
+    "cap:sync:tv": "cross-env CAPACITOR_WEB_DIR=dist-tv npx cap sync android",
+    "android:mobile:debug": "npm run build:mobile && npm run cap:sync:mobile && cd android && gradlew.bat assembleDebug",
+    "android:tv:debug": "npm run build:tv && npm run cap:sync:tv && cd android && gradlew.bat assembleDebug",
+    "android:mobile:release": "npm run build:mobile && npm run cap:sync:mobile && cd android && gradlew.bat assembleRelease",
+    "android:tv:release": "npm run build:tv && npm run cap:sync:tv && cd android && gradlew.bat assembleRelease"
   },
   "keywords": [
     "music",
@@ -41,6 +49,8 @@
     "@applemusic-like-lyrics/core": "^0.5.0",
     "@applemusic-like-lyrics/lyric": "^1.0.0",
     "@applemusic-like-lyrics/react": "^0.5.0",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -81,6 +91,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@types/crypto-js": "^4.2.2",
     "@types/mime-types": "^3.0.1",
     "@types/react": "^18.2.43",
