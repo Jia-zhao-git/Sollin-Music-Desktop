@@ -12,12 +12,17 @@ const config: CapacitorConfig = {
     cleartext: true,
     allowNavigation: ['*'],
   },
+  // Enable native HTTP bridge on Capacitor Android to avoid WebView CORS/mixed-content Failed to fetch errors.
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
+  },
   android: {
     path: 'android',
     // Edge-to-edge WebView (content draws behind status/nav bar)
     allowMixedContent: true,
     captureInput: true,
-    webContentsDebuggingEnabled: false,
     buildOptions: {
       keystorePath: process.env.CAPACITOR_ANDROID_KEYSTORE_PATH,
       keystorePassword: process.env.CAPACITOR_ANDROID_KEYSTORE_PASSWORD,

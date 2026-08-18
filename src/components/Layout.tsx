@@ -554,13 +554,13 @@ export default function Layout() {
           <TopBar />
         </div>
 
-        <div className="flex flex-1 overflow-hidden relative">
+        <div className="flex flex-1 min-h-0 overflow-hidden relative">
           {/* Sidebar */}
           {!isCompact && <Sidebar />}
 
           {/* Main content */}
           <div className={cn(
-            'flex-1 min-w-0 relative transition-[margin] duration-300',
+            'flex-1 min-w-0 min-h-0 relative transition-[margin] duration-300',
             !isCompact && (sidebarCollapsed ? 'ml-20' : 'ml-56')
           )}>
             <div

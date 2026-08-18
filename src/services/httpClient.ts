@@ -1,3 +1,5 @@
+import { Capacitor, CapacitorHttp } from '@capacitor/core'
+
 export interface HttpRequestOptions {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PROPFIND' | 'MKCOL' | 'HEAD' | string
@@ -44,11 +46,41 @@ const fetchInBrowser = async (options: HttpRequestOptions, useDevProxy = false):
   }
 }
 
+const canUseCapacitorHttp = () => {
+  try {
+    return Capacitor.isNativePlatform?.() === true
+  } catch {
+    return false
+  }
+}
+
+const fetchInCapacitor = async (options: HttpRequestOptions): Promise<HttpResponse> => {
+  const response = await CapacitorHttp.request({
+    url: options.url,
+    method: options.method || 'GET',
+    headers: options.headers,
+    data: options.body,
+    responseType: 'text',
+    readTimeout: options.timeoutMs,
+    connectTimeout: options.timeoutMs,
+  })
+
+  return {
+    status: response.status,
+    headers: response.headers || {},
+    bodyText: typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? ''),
+  }
+}
+
 export const httpClient = {
   async request(options: HttpRequestOptions): Promise<HttpResponse> {
     const electronApi = typeof window !== 'undefined' ? (window.electronAPI as any) : undefined
     if (electronApi?.httpRequest) {
       return electronApi.httpRequest(options)
+    }
+
+    if (canUseCapacitorHttp()) {
+      return fetchInCapacitor(options)
     }
 
     try {

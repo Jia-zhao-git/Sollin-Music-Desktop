@@ -485,10 +485,10 @@ export default function TopBar() {
   const currentPlatformName = PLATFORM_OPTIONS.find((p) => p.id === searchPlatform)?.name || '全部'
 
   return (
-    <div className="drag-region h-14 flex items-center gap-2 bg-[var(--panel-bg)] px-3 sm:gap-4 sm:px-6 border-b border-gray-200/30 dark:border-gray-800/50"
+    <div className="drag-region flex min-h-14 items-center gap-2 bg-[var(--panel-bg)] px-3 py-2 sm:gap-4 sm:px-6 border-b border-gray-200/30 dark:border-gray-800/50 app-topbar"
       style={{ backdropFilter: 'blur(var(--panel-backdrop-blur))' }}>
       {/* Search Box (with platform selector merged inside) */}
-      <form ref={searchFormRef} onSubmit={handleSearch} className="no-drag min-w-0 flex-1 max-w-xl relative">
+      <form ref={searchFormRef} onSubmit={handleSearch} className="no-drag min-w-0 flex-1 max-w-xl relative app-topbar-search">
         <div
           className={cn(
             'relative flex items-center rounded-full transition-all duration-200',
@@ -502,7 +502,7 @@ export default function TopBar() {
             <DropdownMenu.Trigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-1 pl-3 pr-2 py-1 my-1 ml-1 rounded-full text-xs font-medium text-[var(--text-secondary)] hover:bg-gray-200/70 dark:hover:bg-gray-700/60 transition-colors flex-shrink-0"
+                className="flex items-center gap-1 pl-3 pr-2 py-1 my-1 ml-1 rounded-full text-xs font-medium text-[var(--text-secondary)] hover:bg-gray-200/70 dark:hover:bg-gray-700/60 transition-colors flex-shrink-0 app-search-platform"
                 title="选择搜索平台"
               >
                 <Globe className="w-3.5 h-3.5" />
@@ -647,7 +647,7 @@ export default function TopBar() {
       <div className="hidden flex-1 sm:block" />
 
       {/* Account Section */}
-      <div className="no-drag flex shrink-0 items-center gap-1 sm:gap-2">
+      <div className="no-drag flex shrink-0 items-center gap-1 sm:gap-2 app-topbar-actions">
         <VersionStatusButton />
 
         {/* Netease Account */}

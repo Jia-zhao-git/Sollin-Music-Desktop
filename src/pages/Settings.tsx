@@ -1686,9 +1686,9 @@ export default function Settings() {
         : '点击展开查看当前 LX 音源脚本、运行状态与手动切换入口'
 
   return (
-    <div className="flex gap-6 h-full">
+    <div className="flex gap-6 h-full settings-page">
       {/* Navigation Sidebar */}
-      <aside className="w-48 flex-shrink-0 self-start pt-2 max-h-full overflow-y-auto">
+      <aside className="w-48 flex-shrink-0 self-start pt-2 max-h-full overflow-y-auto settings-sidebar">
         <div className="card p-2 space-y-1">
           {SETTINGS_NAV_GROUPS.map((group) => {
             const GroupIcon = group.icon
@@ -1749,11 +1749,11 @@ export default function Settings() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 space-y-6 overflow-y-auto pb-32">
+      <div className="flex-1 space-y-6 overflow-y-auto pb-32 settings-content">
       {/* Sollin Branding at Top */}
-      <div className="text-center py-8">
+      <div className="text-center py-8 settings-branding">
         <h1
-          className="text-6xl font-bold bg-gradient-to-r from-primary-500 via-pink-500 to-orange-400 bg-clip-text text-transparent animate-pulse drop-shadow-lg"
+          className="text-6xl font-bold bg-gradient-to-r from-primary-500 via-pink-500 to-orange-400 bg-clip-text text-transparent animate-pulse drop-shadow-lg settings-brand-title"
           style={{
             animation: 'shimmer 3s ease-in-out infinite, float 4s ease-in-out infinite',
             textShadow: '0 0 40px rgba(250, 45, 72, 0.3)',
