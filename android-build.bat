@@ -4,25 +4,27 @@ setlocal EnableDelayedExpansion
 title JiaMusic - Android APK 打包工具
 cd /d "%~dp0"
 
+:: 读取版本号
+for /f "tokens=2 delims=:, " %%V in ('findstr /r "\"version\"" package.json') do (
+    set "RAW_VER=%%~V"
+)
+set "APP_VER=%RAW_VER:"=%"
+
 echo ============================================
-echo  JiaMusic Android APK 打包工具
+echo  JiaMusic Android APK 打包工具  v%APP_VER%
 echo ============================================
 echo.
 
 :: ─── 自动查找 JDK 21（Capacitor 7.x 要求）──
-:: 优先找 JDK 21，其次 JDK 17（可能报 Java 21 错误）
 set "JAVA_OK=0"
-set "JAVA_HOME_FOUND="
 
 java -version >nul 2>&1
 if %errorlevel%==0 (
     set "JAVA_OK=1"
-    for /f "tokens=3" %%V in ('java -version 2^>^&1 ^| findstr /i "version"') do set "JAVA_VER=%%V"
-    echo [OK] JDK 已在 PATH 中，版本: !JAVA_VER!
+    echo [OK] JDK 已在 PATH 中
     goto :check_sdk
 )
 
-:: 优先查找 JDK 21
 for %%P in (
     "C:\Program Files\Eclipse Adoptium\jdk-21*"
     "C:\Program Files\Java\jdk-21*"
@@ -38,26 +40,22 @@ for %%P in (
     )
 )
 
-:: 再查 JDK 17（会有 Java 21 编译警告）
 for %%P in (
     "C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot"
     "C:\Program Files\Eclipse Adoptium\jdk-17*"
     "C:\Program Files\Java\jdk-17*"
     "C:\Program Files\Microsoft\jdk-17*"
-    "C:\Program Files\BellSoft\LibericaJDK-17*"
 ) do (
     if exist "%%~P\bin\java.exe" (
         set "JAVA_HOME=%%~P"
         set "PATH=%%~P\bin;!PATH!"
         set "JAVA_OK=1"
-        echo [警告] 检测到 JDK 17: %%~P
-        echo [警告] Capacitor 7.x 需要 JDK 21，可能编译失败
+        echo [警告] 检测到 JDK 17，Capacitor 7.x 需要 JDK 21，可能编译失败
         echo [警告] 建议：winget install EclipseAdoptium.Temurin.21.JDK
         goto :check_sdk
     )
 )
 
-:: 查注册表
 for /f "tokens=2*" %%A in ('reg query "HKLM\SOFTWARE\JavaSoft\JDK" /v CurrentVersion 2^>nul') do set "JDK_VER=%%B"
 if defined JDK_VER (
     for /f "tokens=2*" %%A in ('reg query "HKLM\SOFTWARE\JavaSoft\JDK\!JDK_VER!" /v JavaHome 2^>nul') do set "JAVA_HOME=%%B"
@@ -73,7 +71,6 @@ if defined JDK_VER (
 if "!JAVA_OK!"=="0" echo [缺少] 未找到 JDK
 
 :check_sdk
-:: ─── 检查 Android SDK ───────────────────────
 set "SDK_OK=0"
 if defined ANDROID_HOME (
     if exist "%ANDROID_HOME%\platform-tools\adb.exe" (
@@ -106,7 +103,6 @@ for %%P in (
 echo [缺少] 未找到 Android SDK
 
 :check_gradle
-:: ─── 检查 Gradle wrapper ────────────────────
 set "GRADLE_OK=0"
 if exist "android\gradlew.bat" (
     set "GRADLE_OK=1"
@@ -176,8 +172,10 @@ cd android
 call gradlew.bat assembleDebug
 if %errorlevel% neq 0 ( cd .. & goto :build_fail )
 cd ..
+if not exist "release" mkdir release
+copy /y "android\app\build\outputs\apk\debug\app-debug.apk" "release\ZJ-android-%APP_VER%-debug.apk" >nul
 echo.
-echo [完成] APK 位置：android\app\build\outputs\apk\debug\app-debug.apk
+echo [完成] APK 已复制到 release\ZJ-android-%APP_VER%-debug.apk
 pause
 exit /b 0
 
@@ -192,8 +190,10 @@ cd android
 call gradlew.bat assembleRelease
 if %errorlevel% neq 0 ( cd .. & goto :build_fail )
 cd ..
+if not exist "release" mkdir release
+copy /y "android\app\build\outputs\apk\release\app-release.apk" "release\ZJ-android-%APP_VER%.apk" >nul
 echo.
-echo [完成] APK 位置：android\app\build\outputs\apk\release\app-release.apk
+echo [完成] APK 已复制到 release\ZJ-android-%APP_VER%.apk
 pause
 exit /b 0
 
@@ -210,8 +210,10 @@ call gradlew.bat assembleDebug
 if %errorlevel% neq 0 ( cd .. & goto :build_fail )
 cd ..
 set CAPACITOR_WEB_DIR=
+if not exist "release" mkdir release
+copy /y "android\app\build\outputs\apk\debug\app-debug.apk" "release\ZJ-tv-%APP_VER%-debug.apk" >nul
 echo.
-echo [完成] APK 位置：android\app\build\outputs\apk\debug\app-debug.apk
+echo [完成] APK 已复制到 release\ZJ-tv-%APP_VER%-debug.apk
 pause
 exit /b 0
 
@@ -228,8 +230,10 @@ call gradlew.bat assembleRelease
 if %errorlevel% neq 0 ( cd .. & goto :build_fail )
 cd ..
 set CAPACITOR_WEB_DIR=
+if not exist "release" mkdir release
+copy /y "android\app\build\outputs\apk\release\app-release.apk" "release\ZJ-tv-%APP_VER%.apk" >nul
 echo.
-echo [完成] APK 位置：android\app\build\outputs\apk\release\app-release.apk
+echo [完成] APK 已复制到 release\ZJ-tv-%APP_VER%.apk
 pause
 exit /b 0
 

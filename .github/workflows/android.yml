@@ -87,17 +87,33 @@ jobs:
           CAPACITOR_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
+      - name: Get version
+        id: get_version
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+
       - name: Rename APK
         run: |
           BUILD_TYPE=${{ (github.event.inputs.build_type == 'release' || github.event_name == 'push') && 'release' || 'debug' }}
-          mkdir -p apk-output
-          find android/app/build/outputs/apk -name "*.apk" -exec cp {} apk-output/jiamusic-${{ matrix.target }}-${BUILD_TYPE}.apk \;
+          TARGET=${{ matrix.target }}
+          VERSION=${{ steps.get_version.outputs.version }}
+          mkdir -p release
+          if [ "$TARGET" = "mobile" ]; then
+            PREFIX="ZJ-android"
+          else
+            PREFIX="ZJ-tv"
+          fi
+          if [ "$BUILD_TYPE" = "release" ]; then
+            OUTNAME="${PREFIX}-${VERSION}.apk"
+          else
+            OUTNAME="${PREFIX}-${VERSION}-debug.apk"
+          fi
+          find android/app/build/outputs/apk -name "*.apk" -exec cp {} release/${OUTNAME} \;
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jiamusic-android-${{ matrix.target }}
-          path: apk-output/*.apk
+          name: zj-${{ matrix.target }}-apk
+          path: release/ZJ-*.apk
 
   release:
     name: GitHub Release
