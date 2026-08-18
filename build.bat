@@ -10,15 +10,17 @@ echo          JiaMusic 项目管理脚本
 echo ============================================
 echo  [1] 启动开发模式   npm run electron:dev
 echo  [2] 打包构建       多端打包菜单
-echo  [3] 提交并推送到 GitHub
-echo  [4] 退出
+echo  [3] Android APK  手机端 / TV 端打包
+echo  [4] 提交并推送到 GitHub
+echo  [5] 退出
 echo ============================================
-set /p choice=请选择操作（输入 1-4 后回车）：
+set /p choice=请选择操作（输入 1-5 后回车）：
 
 if "%choice%"=="1" goto dev
 if "%choice%"=="2" goto build_menu
-if "%choice%"=="3" goto push
-if "%choice%"=="4" goto end
+if "%choice%"=="3" goto android_build
+if "%choice%"=="4" goto push
+if "%choice%"=="5" goto end
 echo 输入无效，请重新选择。
 pause
 goto menu
@@ -118,6 +120,10 @@ echo  连续打包失败，请检查上方错误信息。
 echo ============================================
 pause
 goto build_menu
+
+:android_build
+call android-build.bat
+goto menu
 
 :push
 echo 正在检查工作区修改...
