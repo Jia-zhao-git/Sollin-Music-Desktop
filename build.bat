@@ -1,122 +1,116 @@
 @echo off
-chcp 65001 >nul
-title JiaMusic é¡¹ç›®ç®¡ç†è„šæœ¬
+chcp 936 >nul
+title JiaMusic ÏîÄ¿¹ÜÀí½Å±¾
 cd /d "%~dp0"
 
 :menu
 cls
 echo ============================================
-echo          JiaMusic é¡¹ç›®ç®¡ç†è„šæœ¬
+echo          JiaMusic ÏîÄ¿¹ÜÀí½Å±¾
 echo ============================================
-echo  [1] å¯åŠ¨å¼€å‘æ¨¡å¼   npm run electron:dev
-echo  [2] æ‰“åŒ…æ„å»º       å¤šç«¯æ‰“åŒ…èœå•
-echo  [3] Android APK  æ‰‹æœºç«¯ / TV ç«¯æ‰“åŒ…
-echo  [4] æäº¤å¹¶æ¨é€åˆ° GitHub
-echo  [5] é€€å‡º
+echo  [1] Æô¶¯¿ª·¢Ä£Ê½   npm run electron:dev
+echo  [2] ´ò°ü¹¹½¨       ¶à¶Ë´ò°ü²Ëµ¥
+echo  [3] Android APK  ÊÖ»ú¶Ë / TV ¶Ë´ò°ü
+echo  [4] Ìá½»²¢ÍÆËÍµ½ GitHub
+echo  [5] ÍË³ö
 echo ============================================
-set /p choice=è¯·é€‰æ‹©æ“ä½œï¼ˆè¾“å…¥ 1-5 åå›è½¦ï¼‰ï¼š
+set /p choice=ÇëÑ¡Ôñ²Ù×÷£¨ÊäÈë 1-5 ºó»Ø³µ£©£º
 
 if "%choice%"=="1" goto dev
 if "%choice%"=="2" goto build_menu
 if "%choice%"=="3" goto android_build
 if "%choice%"=="4" goto push
 if "%choice%"=="5" goto end
-echo è¾“å…¥æ— æ•ˆï¼Œè¯·é‡æ–°é€‰æ‹©ã€‚
+echo ÊäÈëÎŞĞ§£¬ÇëÖØĞÂÑ¡Ôñ¡£
 pause
 goto menu
 
 :dev
-echo æ­£åœ¨å¯åŠ¨å¼€å‘æ¨¡å¼ï¼ˆå·²åœ¨æ–°çª—å£æ‰“å¼€ï¼Œå¯éšæ—¶å…³é—­è¯¥çª—å£ï¼‰...
-start "JiaMusic å¼€å‘æ¨¡å¼" npm run electron:dev
+echo ÕıÔÚÆô¶¯¿ª·¢Ä£Ê½...
+start "JiaMusic ¿ª·¢Ä£Ê½" npm run electron:dev
 goto menu
 
 :build_menu
 cls
 echo ============================================
-echo              JiaMusic å¤šç«¯æ‰“åŒ…
+echo              JiaMusic ¶à¶Ë´ò°ü
 echo ============================================
-echo  [1] Web é™æ€åŒ…             npm run build:web
-echo  [2] æ‰‹æœºç«¯ H5 åŒ…           npm run build:mobile
-echo  [3] TV ç«¯ Web åŒ…           npm run build:tv
-echo  [4] æ¡Œé¢ç«¯ï¼šå½“å‰å¹³å°       npm run electron:build
-echo  [5] Windows å…¨æ¶æ„         npm run electron:build:win
+echo  [1] Web ¾²Ì¬°ü             npm run build:web
+echo  [2] ÊÖ»ú¶Ë H5 °ü           npm run build:mobile
+echo  [3] TV ¶Ë Web °ü           npm run build:tv
+echo  [4] ×ÀÃæ¶Ë£ºµ±Ç°Æ½Ì¨       npm run electron:build
+echo  [5] Windows È«¼Ü¹¹         npm run electron:build:win
 echo  [6] Windows x64            npm run electron:build:win:x64
-echo  [7] macOS å…¨æ¶æ„           npm run electron:build:mac
+echo  [7] macOS È«¼Ü¹¹           npm run electron:build:mac
 echo  [8] macOS x64              npm run electron:build:mac:x64
 echo  [9] macOS arm64            npm run electron:build:mac:arm64
-echo  [10] Linux å…¨æ¶æ„          npm run electron:build:linux
+echo  [10] Linux È«¼Ü¹¹          npm run electron:build:linux
 echo  [11] Linux x64             npm run electron:build:linux:x64
-echo  [12] Windows + Linux x64   è¿ç»­æ‰“åŒ…
-echo  [0] è¿”å›ä¸»èœå•
+echo  [12] Windows + Linux x64   Á¬Ğø´ò°ü
+echo  [0] ·µ»ØÖ÷²Ëµ¥
 echo ============================================
-echo æç¤ºï¼šæ‰‹æœºç«¯ / TV ç«¯è¿™é‡Œæ‰“çš„æ˜¯å¯éƒ¨ç½² Web åŒ…ï¼›APK/TV APK éœ€è¦é¢å¤–æ¥å…¥ Android å®¹å™¨ã€‚
-echo æç¤ºï¼šmacOS å®‰è£…åŒ…é€šå¸¸éœ€è¦åœ¨ macOS ç³»ç»Ÿä¸Šæ‰“åŒ…ã€‚
+echo ÌáÊ¾£ºmacOS °²×°°üÍ¨³£ĞèÒªÔÚ macOS ÏµÍ³ÉÏ´ò°ü¡£
 echo ============================================
-set /p build_choice=è¯·é€‰æ‹©æ‰“åŒ…ç›®æ ‡ï¼ˆè¾“å…¥ 0-12 åå›è½¦ï¼‰ï¼š
+set /p build_choice=ÇëÑ¡Ôñ´ò°üÄ¿±ê£¨ÊäÈë 0-12 ºó»Ø³µ£©£º
 
 set "build_title="
 set "build_cmd="
 
 if "%build_choice%"=="0" goto menu
-if "%build_choice%"=="1" set "build_title=Web é™æ€åŒ…"& set "build_cmd=npm run build:web"
-if "%build_choice%"=="2" set "build_title=æ‰‹æœºç«¯ H5 åŒ…"& set "build_cmd=npm run build:mobile"
-if "%build_choice%"=="3" set "build_title=TV ç«¯ Web åŒ…"& set "build_cmd=npm run build:tv"
-if "%build_choice%"=="4" set "build_title=æ¡Œé¢ç«¯ï¼šå½“å‰å¹³å°"& set "build_cmd=npm run electron:build"
-if "%build_choice%"=="5" set "build_title=Windows å…¨æ¶æ„"& set "build_cmd=npm run electron:build:win"
+if "%build_choice%"=="1" set "build_title=Web ¾²Ì¬°ü"& set "build_cmd=npm run build:web"
+if "%build_choice%"=="2" set "build_title=ÊÖ»ú¶Ë H5 °ü"& set "build_cmd=npm run build:mobile"
+if "%build_choice%"=="3" set "build_title=TV ¶Ë Web °ü"& set "build_cmd=npm run build:tv"
+if "%build_choice%"=="4" set "build_title=×ÀÃæ¶Ë£ºµ±Ç°Æ½Ì¨"& set "build_cmd=npm run electron:build"
+if "%build_choice%"=="5" set "build_title=Windows È«¼Ü¹¹"& set "build_cmd=npm run electron:build:win"
 if "%build_choice%"=="6" set "build_title=Windows x64"& set "build_cmd=npm run electron:build:win:x64"
-if "%build_choice%"=="7" set "build_title=macOS å…¨æ¶æ„"& set "build_cmd=npm run electron:build:mac"
+if "%build_choice%"=="7" set "build_title=macOS È«¼Ü¹¹"& set "build_cmd=npm run electron:build:mac"
 if "%build_choice%"=="8" set "build_title=macOS x64"& set "build_cmd=npm run electron:build:mac:x64"
 if "%build_choice%"=="9" set "build_title=macOS arm64"& set "build_cmd=npm run electron:build:mac:arm64"
-if "%build_choice%"=="10" set "build_title=Linux å…¨æ¶æ„"& set "build_cmd=npm run electron:build:linux"
+if "%build_choice%"=="10" set "build_title=Linux È«¼Ü¹¹"& set "build_cmd=npm run electron:build:linux"
 if "%build_choice%"=="11" set "build_title=Linux x64"& set "build_cmd=npm run electron:build:linux:x64"
 if "%build_choice%"=="12" goto build_win_linux_x64
 
 if "%build_cmd%"=="" (
-    echo è¾“å…¥æ— æ•ˆï¼Œè¯·é‡æ–°é€‰æ‹©ã€‚
+    echo ÊäÈëÎŞĞ§£¬ÇëÖØĞÂÑ¡Ôñ¡£
     pause
     goto build_menu
 )
 
-goto run_build
-
-:run_build
-echo æ­£åœ¨æ‰“åŒ…ï¼š%build_title%
-echo æ‰§è¡Œå‘½ä»¤ï¼š%build_cmd%
+echo ÕıÔÚ´ò°ü£º%build_title%
+echo Ö´ĞĞÃüÁî£º%build_cmd%
 echo ============================================
 call %build_cmd%
 if %errorlevel%==0 (
     echo ============================================
-    echo  %build_title% æ„å»ºå®Œæˆï¼
-    echo  Web è¾“å‡ºç›®å½•ï¼šdist
-    echo  æ‰‹æœºç«¯è¾“å‡ºç›®å½•ï¼šdist-mobile
-    echo  TV ç«¯è¾“å‡ºç›®å½•ï¼šdist-tv
-    echo  æ¡Œé¢ç«¯è¾“å‡ºç›®å½•ï¼šrelease
+    echo  %build_title% ¹¹½¨Íê³É£¡
+    echo  Web Êä³öÄ¿Â¼£ºdist
+    echo  ÊÖ»ú¶ËÊä³öÄ¿Â¼£ºdist-mobile
+    echo  TV ¶ËÊä³öÄ¿Â¼£ºdist-tv
+    echo  ×ÀÃæ¶ËÊä³öÄ¿Â¼£ºrelease
     echo ============================================
 ) else (
     echo ============================================
-    echo  %build_title% æ„å»ºå¤±è´¥ï¼Œè¯·æ£€æŸ¥ä¸Šæ–¹é”™è¯¯ä¿¡æ¯ã€‚
+    echo  %build_title% ¹¹½¨Ê§°Ü£¬Çë¼ì²éÉÏ·½´íÎóĞÅÏ¢¡£
     echo ============================================
 )
 pause
 goto build_menu
 
 :build_win_linux_x64
-echo æ­£åœ¨è¿ç»­æ‰“åŒ…ï¼šWindows x64 + Linux x64
-echo ============================================
+echo ÕıÔÚÁ¬Ğø´ò°ü£ºWindows x64 + Linux x64
 call npm run electron:build:win:x64
 if not %errorlevel%==0 goto build_combo_failed
 call npm run electron:build:linux:x64
 if not %errorlevel%==0 goto build_combo_failed
 echo ============================================
-echo  Windows x64 + Linux x64 æ„å»ºå®Œæˆï¼
-echo  æ¡Œé¢ç«¯è¾“å‡ºç›®å½•ï¼šrelease
+echo  Windows x64 + Linux x64 ¹¹½¨Íê³É£¡
 echo ============================================
 pause
 goto build_menu
 
 :build_combo_failed
 echo ============================================
-echo  è¿ç»­æ‰“åŒ…å¤±è´¥ï¼Œè¯·æ£€æŸ¥ä¸Šæ–¹é”™è¯¯ä¿¡æ¯ã€‚
+echo  Á¬Ğø´ò°üÊ§°Ü£¬Çë¼ì²éÉÏ·½´íÎóĞÅÏ¢¡£
 echo ============================================
 pause
 goto build_menu
@@ -126,25 +120,25 @@ call android-build.bat
 goto menu
 
 :push
-echo æ­£åœ¨æ£€æŸ¥å·¥ä½œåŒºä¿®æ”¹...
+echo ÕıÔÚ¼ì²é¹¤×÷ÇøĞŞ¸Ä...
 git add -A
 git diff --cached --quiet
 if %errorlevel%==0 (
-    echo å½“å‰æ²¡æœ‰éœ€è¦æäº¤çš„ä¿®æ”¹ï¼Œå·²è·³è¿‡ã€‚
+    echo µ±Ç°Ã»ÓĞĞèÒªÌá½»µÄĞŞ¸Ä£¬ÒÑÌø¹ı¡£
     pause
     goto menu
 )
-set /p msg=è¯·è¾“å…¥æäº¤è¯´æ˜ï¼ˆç›´æ¥å›è½¦ä½¿ç”¨é»˜è®¤è¯´æ˜ï¼‰ï¼š
-if "%msg%"=="" set "msg=æ›´æ–°ï¼š%date% %time%"
+set /p msg=ÇëÊäÈëÌá½»ËµÃ÷£¨Ö±½Ó»Ø³µÊ¹ÓÃÄ¬ÈÏËµÃ÷£©£º
+if "%msg%"=="" set "msg=¸üĞÂ£º%date% %time%"
 git commit -m "%msg%"
-git push origin main
+git push origin HEAD
 if %errorlevel%==0 (
     echo ============================================
-    echo  å·²æˆåŠŸæäº¤å¹¶æ¨é€åˆ° GitHubï¼
+    echo  ÒÑ³É¹¦Ìá½»²¢ÍÆËÍµ½ GitHub£¡
     echo ============================================
 ) else (
     echo ============================================
-    echo  æ¨é€å¤±è´¥ï¼Œè¯·æ£€æŸ¥ç½‘ç»œæˆ– SSH æƒé™ã€‚
+    echo  ÍÆËÍÊ§°Ü£¬Çë¼ì²éÍøÂç»òÈ¨ÏŞ¡£
     echo ============================================
 )
 pause
