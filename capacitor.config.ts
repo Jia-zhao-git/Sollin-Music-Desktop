@@ -7,8 +7,17 @@ const config: CapacitorConfig = {
   appName: 'JiaMusic',
   webDir,
   bundledWebRuntime: false,
+  server: {
+    // Allow mixed-content and cleartext for local API calls
+    cleartext: true,
+    allowNavigation: ['*'],
+  },
   android: {
     path: 'android',
+    // Edge-to-edge WebView (content draws behind status/nav bar)
+    allowMixedContent: true,
+    captureInput: true,
+    webContentsDebuggingEnabled: false,
     buildOptions: {
       keystorePath: process.env.CAPACITOR_ANDROID_KEYSTORE_PATH,
       keystorePassword: process.env.CAPACITOR_ANDROID_KEYSTORE_PASSWORD,

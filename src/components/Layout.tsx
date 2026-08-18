@@ -80,9 +80,16 @@ const LYRICS_OPTION_STORAGE_KEYS = {
 const useResponsiveViewport = () => {
   const getSnapshot = () => {
     if (typeof window === 'undefined') return { isCompact: false, isTvLike: false }
+    const w = window.innerWidth
+    const h = window.innerHeight
+    // TV: large screen (>=1280px) + coarse pointer + landscape + not a typical phone aspect ratio
+    const isLargeScreen = w >= 1280
+    const isCoarse = window.matchMedia('(pointer: coarse)').matches
+    const isLandscapeLike = w > h
+    const isTvLike = isLargeScreen && isCoarse && isLandscapeLike
     return {
-      isCompact: window.matchMedia('(max-width: 767px)').matches,
-      isTvLike: window.matchMedia('(min-width: 1280px) and (pointer: coarse)').matches,
+      isCompact: w < 768,
+      isTvLike,
     }
   }
 
@@ -120,7 +127,7 @@ function MobileBottomNav() {
   ]
 
   return (
-    <nav className="mobile-bottom-nav fixed inset-x-0 bottom-20 z-40 border-t border-black/5 bg-[var(--panel-bg)] px-2 pb-[env(safe-area-inset-bottom)] pt-1.5 backdrop-blur-xl dark:border-white/10 md:hidden">
+    <nav className="mobile-bottom-nav fixed inset-x-0 bottom-[env(safe-area-inset-bottom,0px)] z-40 border-t border-black/5 bg-[var(--panel-bg)] px-2 pt-1.5 backdrop-blur-xl dark:border-white/10 md:hidden" style={{paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0.375rem)', bottom: '5rem'}}>
       <div className="grid grid-cols-5 gap-1">
         {items.map((item) => (
           <NavLink
@@ -520,7 +527,9 @@ export default function Layout() {
   return (
     <>
       <div className={cn(
+        // Use 100dvh for mobile (avoids browser chrome overlap), fallback to 100vh
         'flex h-screen flex-col overflow-hidden relative',
+        'supports-[height:100dvh]:h-[100dvh]',
         isMiniMode && 'hidden',
         isCompact && 'app-compact-viewport',
         isTvLike && 'app-tv-viewport',

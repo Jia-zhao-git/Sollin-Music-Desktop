@@ -454,8 +454,12 @@ export default function Player() {
   const selectablePlaylists = currentSong?.platform === 'local' ? localPlaylists : playlists
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-20 bg-[var(--panel-bg)] z-40 pb-[env(safe-area-inset-bottom)]"
-      style={{ backdropFilter: 'blur(var(--panel-backdrop-blur))' }}>
+    <div className="fixed bottom-0 left-0 right-0 bg-[var(--panel-bg)] z-40"
+      style={{
+        backdropFilter: 'blur(var(--panel-backdrop-blur))',
+        height: 'calc(5rem + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}>
       {/* Progress bar as top border */}
       <ProgressBarTop
         songId={currentSong?.id}
