@@ -9,21 +9,40 @@ echo  JiaMusic Android APK 打包工具
 echo ============================================
 echo.
 
-:: ─── 自动查找 JDK ──────────────────────────
+:: ─── 自动查找 JDK 21（Capacitor 7.x 要求）──
+:: 优先找 JDK 21，其次 JDK 17（可能报 Java 21 错误）
 set "JAVA_OK=0"
+set "JAVA_HOME_FOUND="
+
 java -version >nul 2>&1
 if %errorlevel%==0 (
     set "JAVA_OK=1"
-    echo [OK] JDK 已在 PATH 中
+    for /f "tokens=3" %%V in ('java -version 2^>^&1 ^| findstr /i "version"') do set "JAVA_VER=%%V"
+    echo [OK] JDK 已在 PATH 中，版本: !JAVA_VER!
     goto :check_sdk
 )
 
-:: java 不在 PATH，尝试常见安装路径
+:: 优先查找 JDK 21
+for %%P in (
+    "C:\Program Files\Eclipse Adoptium\jdk-21*"
+    "C:\Program Files\Java\jdk-21*"
+    "C:\Program Files\Microsoft\jdk-21*"
+    "C:\Program Files\BellSoft\LibericaJDK-21*"
+) do (
+    if exist "%%~P\bin\java.exe" (
+        set "JAVA_HOME=%%~P"
+        set "PATH=%%~P\bin;!PATH!"
+        set "JAVA_OK=1"
+        echo [OK] 自动检测到 JDK 21: %%~P
+        goto :check_sdk
+    )
+)
+
+:: 再查 JDK 17（会有 Java 21 编译警告）
 for %%P in (
     "C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot"
     "C:\Program Files\Eclipse Adoptium\jdk-17*"
     "C:\Program Files\Java\jdk-17*"
-    "C:\Program Files\Java\jdk17*"
     "C:\Program Files\Microsoft\jdk-17*"
     "C:\Program Files\BellSoft\LibericaJDK-17*"
 ) do (
@@ -31,12 +50,14 @@ for %%P in (
         set "JAVA_HOME=%%~P"
         set "PATH=%%~P\bin;!PATH!"
         set "JAVA_OK=1"
-        echo [OK] 自动检测到 JDK: %%~P
+        echo [警告] 检测到 JDK 17: %%~P
+        echo [警告] Capacitor 7.x 需要 JDK 21，可能编译失败
+        echo [警告] 建议：winget install EclipseAdoptium.Temurin.21.JDK
         goto :check_sdk
     )
 )
 
-:: 尝试注册表
+:: 查注册表
 for /f "tokens=2*" %%A in ('reg query "HKLM\SOFTWARE\JavaSoft\JDK" /v CurrentVersion 2^>nul') do set "JDK_VER=%%B"
 if defined JDK_VER (
     for /f "tokens=2*" %%A in ('reg query "HKLM\SOFTWARE\JavaSoft\JDK\!JDK_VER!" /v JavaHome 2^>nul') do set "JAVA_HOME=%%B"
@@ -44,12 +65,12 @@ if defined JDK_VER (
         if exist "!JAVA_HOME!\bin\java.exe" (
             set "PATH=!JAVA_HOME!\bin;!PATH!"
             set "JAVA_OK=1"
-            echo [OK] 从注册表找到 JDK: !JAVA_HOME!
+            echo [OK] 从注册表找到 JDK !JDK_VER!: !JAVA_HOME!
         )
     )
 )
 
-if "!JAVA_OK!"=="0" echo [缺少] 未找到 JDK，请安装后重试
+if "!JAVA_OK!"=="0" echo [缺少] 未找到 JDK
 
 :check_sdk
 :: ─── 检查 Android SDK ───────────────────────
@@ -58,30 +79,33 @@ if defined ANDROID_HOME (
     if exist "%ANDROID_HOME%\platform-tools\adb.exe" (
         set "SDK_OK=1"
         echo [OK] Android SDK: %ANDROID_HOME%
+        goto :check_gradle
     )
 )
 if defined ANDROID_SDK_ROOT (
     if exist "%ANDROID_SDK_ROOT%\platform-tools\adb.exe" (
         set "SDK_OK=1"
+        set "ANDROID_HOME=%ANDROID_SDK_ROOT%"
         echo [OK] Android SDK: %ANDROID_SDK_ROOT%
+        goto :check_gradle
     )
 )
-if "!SDK_OK!"=="0" (
-    for %%P in (
-        "%LOCALAPPDATA%\Android\Sdk"
-        "%USERPROFILE%\AppData\Local\Android\Sdk"
-        "C:\Android\Sdk"
-        "D:\Android\Sdk"
-    ) do (
-        if exist "%%~P\platform-tools\adb.exe" (
-            set "SDK_OK=1"
-            set "ANDROID_HOME=%%~P"
-            echo [OK] 自动检测到 Android SDK: %%~P
-        )
+for %%P in (
+    "%LOCALAPPDATA%\Android\Sdk"
+    "%USERPROFILE%\AppData\Local\Android\Sdk"
+    "C:\Android\Sdk"
+    "D:\Android\Sdk"
+) do (
+    if exist "%%~P\platform-tools\adb.exe" (
+        set "SDK_OK=1"
+        set "ANDROID_HOME=%%~P"
+        echo [OK] 自动检测到 Android SDK: %%~P
+        goto :check_gradle
     )
 )
-if "!SDK_OK!"=="0" echo [缺少] 未找到 Android SDK
+echo [缺少] 未找到 Android SDK
 
+:check_gradle
 :: ─── 检查 Gradle wrapper ────────────────────
 set "GRADLE_OK=0"
 if exist "android\gradlew.bat" (
@@ -95,7 +119,7 @@ echo.
 echo ============================================
 
 if "!JAVA_OK!"=="1" if "!SDK_OK!"=="1" if "!GRADLE_OK!"=="1" (
-    echo 环境检查通过！可以本地打包 APK。
+    echo 环境检查通过！
     echo.
     goto :ask_build
 )
@@ -103,17 +127,15 @@ if "!JAVA_OK!"=="1" if "!SDK_OK!"=="1" if "!GRADLE_OK!"=="1" (
 echo 缺少必要环境，请按以下步骤安装：
 echo.
 if "!JAVA_OK!"=="0" (
-    echo [1] 安装 JDK 17
-    echo     方式一：winget install EclipseAdoptium.Temurin.17.JDK
-    echo     方式二：https://adoptium.net/temurin/releases/?version=17
+    echo [1] 安装 JDK 21（Capacitor 7.x 必须）
+    echo     方式一：winget install EclipseAdoptium.Temurin.21.JDK
+    echo     方式二：https://adoptium.net/temurin/releases/?version=21
     echo.
 )
 if "!SDK_OK!"=="0" (
     echo [2] 安装 Android SDK
     echo     推荐：安装 Android Studio（含完整 SDK）
     echo     下载：https://developer.android.google.cn/studio
-    echo     安装后设置环境变量：
-    echo       ANDROID_HOME = %LOCALAPPDATA%\Android\Sdk
     echo.
 )
 echo 安装完成后重新运行此脚本。
