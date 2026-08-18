@@ -9,17 +9,50 @@ echo  JiaMusic Android APK 打包工具
 echo ============================================
 echo.
 
-:: 检查 JDK
+:: ─── 自动查找 JDK ──────────────────────────
 set "JAVA_OK=0"
 java -version >nul 2>&1
 if %errorlevel%==0 (
     set "JAVA_OK=1"
-    echo [OK] JDK 已安装
-) else (
-    echo [缺少] JDK 未安装或不在 PATH 中
+    echo [OK] JDK 已在 PATH 中
+    goto :check_sdk
 )
 
-:: 检查 Android SDK
+:: java 不在 PATH，尝试常见安装路径
+for %%P in (
+    "C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot"
+    "C:\Program Files\Eclipse Adoptium\jdk-17*"
+    "C:\Program Files\Java\jdk-17*"
+    "C:\Program Files\Java\jdk17*"
+    "C:\Program Files\Microsoft\jdk-17*"
+    "C:\Program Files\BellSoft\LibericaJDK-17*"
+) do (
+    if exist "%%~P\bin\java.exe" (
+        set "JAVA_HOME=%%~P"
+        set "PATH=%%~P\bin;!PATH!"
+        set "JAVA_OK=1"
+        echo [OK] 自动检测到 JDK: %%~P
+        goto :check_sdk
+    )
+)
+
+:: 尝试注册表
+for /f "tokens=2*" %%A in ('reg query "HKLM\SOFTWARE\JavaSoft\JDK" /v CurrentVersion 2^>nul') do set "JDK_VER=%%B"
+if defined JDK_VER (
+    for /f "tokens=2*" %%A in ('reg query "HKLM\SOFTWARE\JavaSoft\JDK\!JDK_VER!" /v JavaHome 2^>nul') do set "JAVA_HOME=%%B"
+    if defined JAVA_HOME (
+        if exist "!JAVA_HOME!\bin\java.exe" (
+            set "PATH=!JAVA_HOME!\bin;!PATH!"
+            set "JAVA_OK=1"
+            echo [OK] 从注册表找到 JDK: !JAVA_HOME!
+        )
+    )
+)
+
+if "!JAVA_OK!"=="0" echo [缺少] 未找到 JDK，请安装后重试
+
+:check_sdk
+:: ─── 检查 Android SDK ───────────────────────
 set "SDK_OK=0"
 if defined ANDROID_HOME (
     if exist "%ANDROID_HOME%\platform-tools\adb.exe" (
@@ -49,7 +82,7 @@ if "!SDK_OK!"=="0" (
 )
 if "!SDK_OK!"=="0" echo [缺少] 未找到 Android SDK
 
-:: 检查 Gradle wrapper
+:: ─── 检查 Gradle wrapper ────────────────────
 set "GRADLE_OK=0"
 if exist "android\gradlew.bat" (
     set "GRADLE_OK=1"
