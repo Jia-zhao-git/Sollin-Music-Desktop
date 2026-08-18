@@ -4,11 +4,11 @@ setlocal EnableDelayedExpansion
 title JiaMusic - Android APK 打包工具
 cd /d "%~dp0"
 
-:: 读取版本号
-for /f "tokens=2 delims=:, " %%V in ('findstr /r "\"version\"" package.json') do (
-    set "RAW_VER=%%~V"
-)
-set "APP_VER=%RAW_VER:"=%"
+:: 读取版本号（通过临时 JS 文件避免引号转义问题）
+echo process.stdout.write(require('./package.json').version) > "%TEMP%\getver.js"
+for /f "delims=" %%V in ('node "%TEMP%\getver.js"') do set "APP_VER=%%V"
+del "%TEMP%\getver.js" >nul 2>&1
+if "%APP_VER%"=="" set "APP_VER=1.0.0"
 
 echo ============================================
 echo  JiaMusic Android APK 打包工具  v%APP_VER%
@@ -142,9 +142,9 @@ exit /b 1
 :ask_build
 echo 选择打包目标：
 echo  [1] 手机端 debug APK
-echo  [2] 手机端 release APK
+echo  [2] 手机端 release APK（需签名配置）
 echo  [3] TV 端 debug APK
-echo  [4] TV 端 release APK
+echo  [4] TV 端 release APK（需签名配置）
 echo  [5] 手机 + TV debug APK（连续打包）
 echo  [0] 退出
 echo.
@@ -170,12 +170,10 @@ if %errorlevel% neq 0 goto :build_fail
 echo 正在打包手机端 debug APK...
 cd android
 call gradlew.bat assembleDebug
-if %errorlevel% neq 0 ( cd .. & goto :build_fail )
+set "GRADLE_ERR=%errorlevel%"
 cd ..
-if not exist "release" mkdir release
-copy /y "android\app\build\outputs\apk\debug\app-debug.apk" "release\ZJ-android-%APP_VER%-debug.apk" >nul
-echo.
-echo [完成] APK 已复制到 release\ZJ-android-%APP_VER%-debug.apk
+if %GRADLE_ERR% neq 0 goto :build_fail
+call :copy_apk "android\app\build\outputs\apk\debug\app-debug.apk" "ZJ-android-%APP_VER%-debug.apk"
 pause
 exit /b 0
 
@@ -188,12 +186,14 @@ if %errorlevel% neq 0 goto :build_fail
 echo 正在打包手机端 release APK...
 cd android
 call gradlew.bat assembleRelease
-if %errorlevel% neq 0 ( cd .. & goto :build_fail )
+set "GRADLE_ERR=%errorlevel%"
 cd ..
-if not exist "release" mkdir release
-copy /y "android\app\build\outputs\apk\release\app-release.apk" "release\ZJ-android-%APP_VER%.apk" >nul
-echo.
-echo [完成] APK 已复制到 release\ZJ-android-%APP_VER%.apk
+if %GRADLE_ERR% neq 0 goto :build_fail
+set "RELEASE_SRC="
+if exist "android\app\build\outputs\apk\release\app-release.apk" set "RELEASE_SRC=android\app\build\outputs\apk\release\app-release.apk"
+if exist "android\app\build\outputs\apk\release\app-release-unsigned.apk" set "RELEASE_SRC=android\app\build\outputs\apk\release\app-release-unsigned.apk"
+if "%RELEASE_SRC%"=="" goto :build_fail
+call :copy_apk "%RELEASE_SRC%" "ZJ-android-%APP_VER%.apk"
 pause
 exit /b 0
 
@@ -207,13 +207,11 @@ if %errorlevel% neq 0 goto :build_fail
 echo 正在打包 TV 端 debug APK...
 cd android
 call gradlew.bat assembleDebug
-if %errorlevel% neq 0 ( cd .. & goto :build_fail )
+set "GRADLE_ERR=%errorlevel%"
 cd ..
 set CAPACITOR_WEB_DIR=
-if not exist "release" mkdir release
-copy /y "android\app\build\outputs\apk\debug\app-debug.apk" "release\ZJ-tv-%APP_VER%-debug.apk" >nul
-echo.
-echo [完成] APK 已复制到 release\ZJ-tv-%APP_VER%-debug.apk
+if %GRADLE_ERR% neq 0 goto :build_fail
+call :copy_apk "android\app\build\outputs\apk\debug\app-debug.apk" "ZJ-tv-%APP_VER%-debug.apk"
 pause
 exit /b 0
 
@@ -227,13 +225,15 @@ if %errorlevel% neq 0 goto :build_fail
 echo 正在打包 TV 端 release APK...
 cd android
 call gradlew.bat assembleRelease
-if %errorlevel% neq 0 ( cd .. & goto :build_fail )
+set "GRADLE_ERR=%errorlevel%"
 cd ..
 set CAPACITOR_WEB_DIR=
-if not exist "release" mkdir release
-copy /y "android\app\build\outputs\apk\release\app-release.apk" "release\ZJ-tv-%APP_VER%.apk" >nul
-echo.
-echo [完成] APK 已复制到 release\ZJ-tv-%APP_VER%.apk
+if %GRADLE_ERR% neq 0 goto :build_fail
+set "RELEASE_SRC="
+if exist "android\app\build\outputs\apk\release\app-release.apk" set "RELEASE_SRC=android\app\build\outputs\apk\release\app-release.apk"
+if exist "android\app\build\outputs\apk\release\app-release-unsigned.apk" set "RELEASE_SRC=android\app\build\outputs\apk\release\app-release-unsigned.apk"
+if "%RELEASE_SRC%"=="" goto :build_fail
+call :copy_apk "%RELEASE_SRC%" "ZJ-tv-%APP_VER%.apk"
 pause
 exit /b 0
 
@@ -243,6 +243,20 @@ call :mobile_debug
 echo 开始打包 TV 端...
 call :tv_debug
 exit /b 0
+
+:copy_apk
+set "SRC=%~1"
+set "DEST_NAME=%~2"
+if not exist "release" mkdir release
+if not exist "%SRC%" (
+    echo [警告] APK 文件不存在：%SRC%
+    goto :eof
+)
+copy /y "%SRC%" "release\%DEST_NAME%" >nul
+echo.
+echo [完成] APK 已复制到 release\%DEST_NAME%
+for %%F in ("release\%DEST_NAME%") do echo [大小] %%~zF bytes
+goto :eof
 
 :build_fail
 echo.
