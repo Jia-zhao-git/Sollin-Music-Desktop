@@ -339,6 +339,8 @@
   }
 
   @media (max-width: 767px) {
+    /* ============ Mobile native app feel ============ */
+
     .app-topbar {
       min-height: auto;
       align-items: stretch;
@@ -370,9 +372,19 @@
       max-width: 2.5rem;
     }
 
+    /* Mobile: hide less-critical top bar buttons to reduce clutter */
+    .app-compact-viewport .app-topbar-actions > button:nth-child(1) {
+      display: none;
+    }
+
     .app-compact-viewport .app-content-scroll {
       height: 100%;
       padding-bottom: calc(env(safe-area-inset-bottom) + 8.75rem);
+    }
+
+    /* Mobile: hide desktop window title bar (no window chrome on phones) */
+    .app-compact-viewport > div:first-child .h-8 {
+      display: none;
     }
 
     .app-compact-viewport .song-row {
@@ -380,6 +392,7 @@
       min-height: 58px;
       padding-left: 0.5rem;
       padding-right: 0.5rem;
+      border-radius: 0.875rem;
     }
 
     .app-compact-viewport .btn-icon {
@@ -387,40 +400,59 @@
       min-height: 2.25rem;
     }
 
+    /* Native-style cards: subtle, rounded, no hard border */
+    .app-compact-viewport .card,
+    .app-compact-viewport .glass-card {
+      border-radius: 1.125rem;
+      border-color: transparent;
+      box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Full-width list rows */
+    .app-compact-viewport .song-row {
+      background: transparent;
+    }
+
+    /* Section headings tighter */
+    .app-compact-viewport h2 {
+      letter-spacing: -0.01em;
+    }
+
+    /* Hide hover-only overlays on touch */
+    .app-compact-viewport .group .opacity-0 {
+      opacity: 0 !important;
+    }
+
+    /* Larger touch targets for bottom nav */
+    .app-compact-viewport .mobile-bottom-nav button {
+      min-height: 3.25rem;
+    }
+
+    /* Main content padding for mobile */
+    .app-compact-viewport main > div {
+      padding-left: 0.875rem !important;
+      padding-right: 0.875rem !important;
+    }
+
     .settings-page {
-      display: block;
-      height: auto;
-      min-height: 100%;
-      overflow: visible;
-    }
-
-    .settings-sidebar {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      width: 100%;
-      max-height: none;
-      padding-top: 0;
-      margin-bottom: 0.75rem;
-      overflow-x: auto;
-      overflow-y: hidden;
-    }
-
-    .settings-sidebar > .card {
-      display: flex;
-      gap: 0.375rem;
-      width: max-content;
-      min-width: 100%;
-      padding: 0.5rem;
-    }
-
-    .settings-sidebar > .card > div {
-      min-width: max-content;
+      display: block !important;
+      height: 100% !important;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .settings-content {
-      overflow: visible;
-      padding-bottom: 9rem;
+      overflow-y: auto !important;
+      overflow-x: hidden;
+      height: 100%;
+      padding-bottom: 4rem !important;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Stacked nav: level rows full-width on mobile */
+    .settings-level-1 .card,
+    .settings-level-2 .card {
+      border-radius: 1rem;
     }
 
     .settings-branding {
@@ -434,19 +466,278 @@
     }
   }
 
+  /* Settings page medium viewport: keep stacked nav, slightly wider rows */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .settings-page {
+      gap: 0;
+    }
+  }
+
+  /* Novel reader compact viewport */
+  @media (max-width: 767px) {
+    .novel-reader-content {
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+
+    .novel-reader-content .sticky > div {
+      gap: 0.5rem;
+    }
+
+    .novel-reader-content .sticky button {
+      padding-left: 0.625rem;
+      padding-right: 0.625rem;
+      font-size: 0.8125rem;
+    }
+
+    .novel-reader-content .sticky .flex-wrap > .flex {
+      flex-wrap: wrap;
+      gap: 0.375rem;
+    }
+
+    /* Full-width tap zones for paging */
+    .novel-reader-content [class*='min-h-['] {
+      min-height: 52vh;
+    }
+  }
+
+  /* Fullscreen video container - landscape orientation */
+  .fullscreen-video-container:fullscreen,
+  .fullscreen-video-container:-webkit-full-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: #000;
+    border-radius: 0 !important;
+  }
+
+  .fullscreen-video-container:fullscreen video,
+  .fullscreen-video-container:-webkit-full-screen video {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    object-fit: contain !important;
+    border-radius: 0 !important;
+  }
+
+  /* Fullscreen controls overlay in fullscreen mode */
+  .fullscreen-video-container:fullscreen .absolute.inset-0.bg-gradient-to-t,
+  .fullscreen-video-container:-webkit-full-screen .absolute.inset-0.bg-gradient-to-t {
+    border-radius: 0 !important;
+  }
+
+  /* VideoPlayer fullscreen */
+  .video-player-container:fullscreen,
+  .video-player-container:-webkit-full-screen {
+    width: 100vw !important;
+    height: 100vh !important;
+    border-radius: 0 !important;
+    background: #000;
+  }
+
+  .video-player-container:fullscreen video,
+  .video-player-container:-webkit-full-screen video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+  }
+
   @media (min-width: 1280px) and (pointer: coarse) {
-    .app-tv-viewport .sidebar-item,
-    .app-tv-viewport .btn-icon,
+    /* ============ TV / 10-foot UI ============ */
+
+    /* Larger base font */
+    .app-tv-viewport {
+      font-size: 17px;
+    }
+
+    /* Sidebar: big icon rail (hide text labels) */
+    .app-tv-viewport .sidebar-item {
+      min-height: 60px;
+      padding: 0.75rem;
+      font-size: 15px;
+      border-radius: 1rem;
+      margin: 0.125rem 0;
+    }
+
+    .app-tv-viewport .sidebar-item svg {
+      width: 26px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .app-tv-viewport .sidebar-item span {
+      display: none !important;
+    }
+
+    .app-tv-viewport .sidebar-item {
+      justify-content: center;
+    }
+
+    .app-tv-viewport .sidebar-item.active {
+      background: rgba(250, 45, 72, 0.16);
+      box-shadow: inset 0 0 0 2px rgba(250, 45, 72, 0.45);
+    }
+
+    /* Playlist cover images hidden in TV rail (keep icons) */
+    .app-tv-viewport .sidebar-item img {
+      display: none !important;
+    }
+
+    /* Sidebar section labels smaller */
+    .app-tv-viewport aside > .card {
+      padding: 0.75rem 0.5rem;
+    }
+
+    /* TV: narrow icon-only sidebar (main nav rail) */
+    .app-tv-viewport aside.fixed {
+      width: 4.5rem !important;
+    }
+
+    .app-tv-viewport .ml-56 {
+      margin-left: 4.5rem !important;
+    }
+
+    .app-tv-viewport .ml-20 {
+      margin-left: 4.5rem !important;
+    }
+
+    /* TopBar: hide search + keep actions, larger */
+    .app-tv-viewport .app-topbar {
+      min-height: 72px;
+      padding: 0.75rem 1.5rem;
+    }
+
+    .app-tv-viewport .app-topbar-search {
+      max-width: 26rem;
+    }
+
+    .app-tv-viewport .app-topbar-actions button {
+      min-width: 52px;
+      min-height: 52px;
+      border-radius: 1rem;
+    }
+
+    .app-tv-viewport .app-topbar-actions button svg {
+      width: 26px;
+      height: 26px;
+    }
+
+    /* TV: hide account labels, keep icons */
+    .app-tv-viewport .app-topbar-actions .hidden.sm\:inline {
+      display: none !important;
+    }
+
+    .app-tv-viewport .app-topbar-actions span.hidden {
+      display: none !important;
+    }
+
+    /* Main content: more padding */
+    .app-tv-viewport main > div {
+      padding: 1.5rem 2.5rem 6rem !important;
+    }
+
+    /* Cards: larger, focus glow for D-pad navigation */
+    .app-tv-viewport .card,
+    .app-tv-viewport .glass-card {
+      scroll-margin: 6rem;
+      border-radius: 1.25rem;
+    }
+
     .app-tv-viewport button,
     .app-tv-viewport a {
       min-height: 44px;
+      scroll-margin: 6rem;
     }
 
-    .app-tv-viewport .card,
-    .app-tv-viewport .glass-card,
-    .app-tv-viewport button,
-    .app-tv-viewport a {
-      scroll-margin: 5rem;
+    .app-tv-viewport button:focus-visible,
+    .app-tv-viewport a:focus-visible,
+    .app-tv-viewport [tabindex]:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(250, 45, 72, 0.9), 0 0 24px rgba(250, 45, 72, 0.45);
+      border-radius: 0.75rem;
+      transform: scale(1.04);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    /* Video cards / posters bigger */
+    .app-tv-viewport .aspect-[3\/4] {
+      border-radius: 1rem;
+    }
+
+    .app-tv-viewport img {
+      scroll-margin: 6rem;
+    }
+
+    /* Song rows: taller */
+    .app-tv-viewport .song-row {
+      min-height: 76px;
+      padding: 0.75rem 1rem;
+      border-radius: 1rem;
+      margin-bottom: 0.25rem;
+    }
+
+    /* Headings */
+    .app-tv-viewport h1 {
+      font-size: 2rem;
+    }
+    .app-tv-viewport h2 {
+      font-size: 1.5rem;
+    }
+
+    /* TV: no hover, so play buttons stay visible on cards */
+    .app-tv-viewport .group .opacity-0 {
+      opacity: 1 !important;
+    }
+
+    .app-tv-viewport .group .bg-black\/0 {
+      background: rgba(0, 0, 0, 0.35) !important;
+    }
+
+    /* Bottom player bar taller */
+    .app-tv-viewport .h-20 {
+      height: 5.5rem;
+    }
+
+    /* Player bar: bigger controls for TV */
+    .app-tv-viewport .h-20 .btn-icon {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 1rem;
+    }
+
+    .app-tv-viewport .h-20 .btn-icon svg {
+      width: 1.75rem;
+      height: 1.75rem;
+    }
+
+    .app-tv-viewport .h-20 input[type='range'] {
+      height: 1.5rem;
+    }
+
+    /* Settings: larger nav items */
+    .app-tv-viewport .settings-level-1 button,
+    .app-tv-viewport .settings-level-2 button {
+      min-height: 60px;
+      font-size: 17px;
+    }
+
+    .app-tv-viewport .settings-level-1 svg,
+    .app-tv-viewport .settings-level-2 svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .app-tv-viewport .settings-content {
+      padding-right: 1rem;
+    }
+
+    /* Novel reader: bigger text comfortable on TV */
+    .app-tv-viewport .novel-reader-content {
+      font-size: 1.25rem;
+      line-height: 2;
     }
   }
 

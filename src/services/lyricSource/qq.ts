@@ -3,6 +3,7 @@ import type { Song } from '@/types'
 import { parseLrc, parseQrc } from './parsers'
 import { decryptQrc } from './qmCrypto'
 import type { LyricsResult } from './types'
+import httpClient from '@/services/httpClient'
 
 const QM_FCG_URL = 'https://u.y.qq.com/cgi-bin/musicu.fcg'
 const QM_SEARCH_FCG_URL = 'https://u.y.qq.com/cgi-bin/musicu.fcg'
@@ -106,12 +107,18 @@ const httpFetchJson = async <T,>(url: string, init?: RequestInit & { headers?: R
     try { return JSON.parse(text) as T } catch { return text as unknown as T }
   }
 
-  const response = await fetch(url, {
-    ...init,
+  // 非 Electron：走 httpClient（CapacitorHttp 原生绕 CORS / 浏览器 dev 代理）。
+  const response = await httpClient.request({
+    url,
+    method: requestMethod,
     headers,
+    body: typeof body === 'string' ? body : undefined,
+    timeoutMs: 20000,
   })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  const text = await response.text()
+  if (response.status && response.status >= 400) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  const text = response.bodyText || ''
   try { return JSON.parse(text) as T } catch { return text as unknown as T }
 }
 

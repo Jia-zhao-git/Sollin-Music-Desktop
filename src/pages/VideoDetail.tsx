@@ -8,12 +8,15 @@ import StatusState from '@/components/StatusState'
 import ReadStateBadge from '@/components/ReadStateBadge'
 import Poster from '@/components/ui/Poster'
 import videoApi from '@/services/videoApi'
+import { WebPlaylistLoader, WebFragmentLoader } from '@/services/videoWebPlayback'
+import { loadWebVideoFile, removeWebVideoFile, isWebCachedPath, getWebCacheId } from '@/services/webVideoCache'
 import { useVideoStore } from '@/stores/videoStore'
 import { usePlayerStore } from '@/stores/playerStore'
 import { videoDownloadManager } from '@/services/videoDownloadManager'
 import type { VideoCacheItem, VideoDetail, VideoEpisode, VideoListItem } from '@/types/video'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
+import { lockLandscape, unlockOrientation } from '@/services/screenOrientation'
 
 const isM3u8 = (url: string) => /\.m3u8(?:$|[?#])/i.test(url)
 const toFileUrl = (filePath: string) => {
@@ -85,26 +88,72 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
     // 播放中 onTimeUpdate 每 5 秒写入 history 会让 currentTime 持续变化，
     // 若作为依赖会导致 effect 重跑 -> 销毁播放器 -> 从头重播（2-4 秒循环重播的根因）。
     const resumeAt = historyItem?.currentTime
+    const isElectron = Boolean(window.electronAPI)
 
-    if (isM3u8(src) && !element.canPlayType('application/vnd.apple.mpegurl')) {
+    const initHls = (useWebLoaders: boolean, targetSrc: string) => {
       void import('hls.js')
-        .then(({ default: Hls }) => {
+        .then(({ default: HlsModule }) => {
           if (disposed) return
-          if (!Hls.isSupported()) {
+          if (!HlsModule.isSupported()) {
             setError('当前环境不支持播放该 m3u8 视频')
             return
           }
 
-          hls = new Hls({ enableWorker: true, lowLatencyMode: false })
-          hls.loadSource(src)
+          hls = useWebLoaders
+            ? new HlsModule({
+              enableWorker: true,
+              lowLatencyMode: false,
+              // 手机/浏览器端 WebView 强制 CORS，hls.js 默认 loader 拉取 ts 分片会被拦截
+              // （分片 CDN 通常不带 Access-Control-Allow-Origin）。改用 httpClient
+              // （CapacitorHttp 原生请求）绕过 CORS，与桌面端 webSecurity=false 效果一致。
+              pLoader: WebPlaylistLoader,
+              fLoader: WebFragmentLoader,
+            })
+            : new HlsModule({ enableWorker: true, lowLatencyMode: false })
+          hls.loadSource(targetSrc)
           hls.attachMedia(element)
-          hls.on(Hls.Events.ERROR, (_event: unknown, data: { fatal: boolean; details?: string }) => {
+          hls.on(HlsModule.Events.ERROR, (_event: unknown, data: { fatal: boolean; details?: string }) => {
             if (data.fatal) setError(data.details || '视频流加载失败')
           })
         })
         .catch(() => setError('视频播放组件加载失败'))
+    }
+
+    const startPlayback = (targetSrc: string) => {
+      if (isM3u8(targetSrc)) {
+        const canNativeHls = element.canPlayType('application/vnd.apple.mpegurl')
+        if (canNativeHls) {
+          // 原生 HLS（iOS Safari / Android WebView）：媒体元素拉取分片不受 CORS 限制。
+          element.src = targetSrc
+        } else if (isElectron) {
+          // 桌面端主窗口 webSecurity=false，hls.js 默认 loader 可直接跨域拉取。
+          initHls(false, targetSrc)
+        } else {
+          // 手机/浏览器：hls.js + CapacitorHttp loader 绕过 CORS。
+          initHls(true, targetSrc)
+        }
+      } else {
+        element.src = targetSrc
+      }
+    }
+
+    // 手机端缓存的视频：缓存项 filePath 为 web://<id>，映射到播放集时被包成了 file:///web://<id>。
+    const webCacheMatch = /^file:\/\/\/?web:\/\/(.+)$/.exec(src)
+    if (webCacheMatch) {
+      void loadWebVideoFile(webCacheMatch[1])
+        .then((blob) => {
+          if (disposed) return
+          if (!blob) {
+            setError('缓存视频文件缺失，请重新缓存')
+            return
+          }
+          startPlayback(URL.createObjectURL(blob))
+        })
+        .catch(() => {
+          if (!disposed) setError('读取缓存视频失败')
+        })
     } else {
-      element.src = src
+      startPlayback(src)
     }
 
     const onLoaded = () => {
@@ -245,8 +294,21 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => {})
+      // Restore portrait when exiting fullscreen on phones
+      void unlockOrientation()
+      const orientation = screen.orientation as ScreenOrientation & { unlock?: () => void }
+      if (orientation?.unlock) {
+        try { orientation.unlock() } catch { /* ignore */ }
+      }
     } else {
       void containerRef.current?.requestFullscreen().catch(() => {})
+      // Lock to landscape for video playback on phones/tablets (native Capacitor
+      // plugin, reliable in Android WebView; web API kept as fallback)
+      void lockLandscape()
+      const orientation = screen.orientation as ScreenOrientation & { lock?: (mode: string) => Promise<void> }
+      if (orientation?.lock) {
+        try { void orientation.lock('landscape') } catch { /* ignore */ }
+      }
     }
   }, [])
 
@@ -319,7 +381,8 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
         }}
         onClick={togglePlay}
         onDoubleClick={toggleFullscreen}
-        className="group relative aspect-video bg-black outline-none"
+        className="video-player-container group relative aspect-video bg-black outline-none"
+        data-tv-arrows="self"
       >
         <video ref={videoRef} playsInline className="h-full w-full bg-black" poster={video.cover} />
 
@@ -368,6 +431,7 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
           onClick={(event) => event.stopPropagation()}
           className={cn(
             'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-3 pt-8 transition-opacity duration-200',
+            'pb-[max(0.75rem,env(safe-area-inset-bottom))]',
             showControls ? 'opacity-100' : 'pointer-events-none opacity-0',
           )}
         >
@@ -527,12 +591,23 @@ export default function VideoDetailPage() {
       }
     })
   }, [activeSourceIndex, detail])
-  // 删除缓存：先删磁盘文件，再清 store 记录（即使删文件失败也清理失效条目）。
+  // 删除缓存：先删磁盘文件 / IndexedDB 文件，再清 store 记录（即使删文件失败也清理失效条目）。
   const handleDeleteCache = useCallback(async (item: VideoCacheItem) => {
-    try {
-      await window.electronAPI?.deleteVideoCacheItem(item.filePath)
-    } catch {
-      // 文件可能已被外部移除，忽略错误，继续清理记录
+    if (isWebCachedPath(item.filePath)) {
+      const cacheId = getWebCacheId(item.filePath)
+      if (cacheId) {
+        try {
+          await removeWebVideoFile(cacheId)
+        } catch {
+          // ignore
+        }
+      }
+    } else {
+      try {
+        await window.electronAPI?.deleteVideoCacheItem(item.filePath)
+      } catch {
+        // 文件可能已被外部移除，忽略错误，继续清理记录
+      }
     }
     removeDownload(item.id)
   }, [removeDownload])
@@ -736,8 +811,12 @@ export default function VideoDetailPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-sm font-semibold text-emerald-600 dark:text-emerald-300"><Download className="h-3.5 w-3.5" /> 已缓存</span>
                   <button onClick={() => handlePlayOffline(cachedItem)} className="inline-flex items-center gap-1 rounded-full bg-blue-500 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-600"><Play className="h-3.5 w-3.5" /> 播放</button>
-                  <button onClick={() => window.electronAPI?.openVideoCacheItem(cachedItem.filePath)} className="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10"><FolderOpen className="h-3.5 w-3.5" /> 打开</button>
-                  <button onClick={() => window.electronAPI?.showVideoCacheItemInFolder(cachedItem.filePath)} className="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">打开所在文件夹</button>
+                  {!isWebCachedPath(cachedItem.filePath) && (
+                    <button onClick={() => window.electronAPI?.openVideoCacheItem(cachedItem.filePath)} className="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10"><FolderOpen className="h-3.5 w-3.5" /> 打开</button>
+                  )}
+                  {!isWebCachedPath(cachedItem.filePath) && (
+                    <button onClick={() => window.electronAPI?.showVideoCacheItemInFolder(cachedItem.filePath)} className="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">打开所在文件夹</button>
+                  )}
                   <button onClick={() => handleDeleteCache(cachedItem)} className="inline-flex items-center gap-1 rounded-full border border-red-500/20 px-3 py-1 text-sm text-red-500 hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" /> 删除</button>
                 </div>
               )

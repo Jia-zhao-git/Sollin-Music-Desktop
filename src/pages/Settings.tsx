@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import {
   Moon,
   Sun,
@@ -23,6 +23,7 @@ import {
   FileCode2,
   Loader2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Ban,
   BellRing,
@@ -515,21 +516,31 @@ export default function Settings() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [activeSection, setActiveSection] = useState('source')
-  const [activeGroup, setActiveGroup] = useState('group-sources')
-  const activeGroupSectionIds = useMemo(() => {
-    const group = SETTINGS_NAV_GROUPS.find((g) => g.id === activeGroup)
-    return group ? group.items.map((item) => item.id) : []
-  }, [activeGroup])
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set(SETTINGS_NAV_GROUPS.map((g) => g.id))
-  )
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(groupId)) next.delete(groupId)
-      else next.add(groupId)
-      return next
-    })
+  // Stacked navigation like a phone settings app:
+  // level 1 = group list, level 2 = sections of a group, level 3 = actual setting content
+  type SettingsNavScreen = { level: 1 } | { level: 2; groupId: string } | { level: 3; groupId: string; sectionId: string }
+  const [navStack, setNavStack] = useState<SettingsNavScreen[]>([{ level: 1 }])
+  const currentNav = navStack[navStack.length - 1]
+  const currentNavGroup = currentNav.level !== 1
+    ? SETTINGS_NAV_GROUPS.find((g) => g.id === currentNav.groupId)
+    : null
+  const currentNavSection = currentNav.level === 3
+    ? currentNavGroup?.items.find((item) => item.id === currentNav.sectionId)
+    : null
+  const pushNav = (screen: SettingsNavScreen) => {
+    setNavStack((prev) => [...prev, screen])
+  }
+  const popNav = () => {
+    setNavStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))
+  }
+  const handleGroupClick = (groupId: string) => {
+    const firstItem = SETTINGS_NAV_GROUPS.find((g) => g.id === groupId)?.items[0]
+    if (firstItem) setActiveSection(firstItem.id)
+    pushNav({ level: 2, groupId })
+  }
+  const handleSectionClick = (groupId: string, sectionId: string) => {
+    setActiveSection(sectionId)
+    pushNav({ level: 3, groupId, sectionId })
   }
   const [dataCacheEnabled, setDataCacheEnabled] = useState(cache.getSettings().enabled)
   const [dataCacheLimitMB, setDataCacheLimitMB] = useState(cache.getSettings().maxSizeMB)
@@ -852,6 +863,35 @@ export default function Settings() {
     }
   }
 
+  const handleImportLxSourceFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+
+    setIsImportingLxSourceUrl(true)
+    try {
+      let latestStatus: LxSourceStatus | null = null
+      let importedCount = 0
+      for (const file of Array.from(files)) {
+        const text = await file.text()
+        const status = await lxSourceApi.importScriptFile(file.name, text)
+        latestStatus = status
+        importedCount += 1
+      }
+      if (latestStatus) applyLxSourceStatus(latestStatus)
+      const loaded = Boolean(latestStatus?.scriptLoaded)
+      addToast({
+        type: loaded ? 'success' : 'info',
+        message: loaded
+          ? `已导入 ${importedCount} 个音源文件并切换生效`
+          : `已导入 ${importedCount} 个音源文件${latestStatus?.lastError ? `，但加载失败：${latestStatus.lastError}` : ''}`,
+      })
+    } catch (error) {
+      console.error('Import LX source files failed:', error)
+      addToast({ type: 'error', message: error instanceof Error ? error.message : '导入音源文件失败' })
+    } finally {
+      setIsImportingLxSourceUrl(false)
+    }
+  }
+
   const handleToggleLxSourceUpdateAlert = async (sourceId?: string) => {
     if (!lxSourceStatus) return
 
@@ -1061,44 +1101,6 @@ export default function Settings() {
 
     return () => clearInterval(interval)
   }, [])
-
-  // Scroll to section
-  const scrollToSection = (sectionId: string) => {
-    setActiveSection(sectionId)
-    const parentGroup = SETTINGS_NAV_GROUPS.find((g) => g.items.some((item) => item.id === sectionId))
-    if (parentGroup) {
-      setExpandedGroups((prev) => new Set(prev).add(parentGroup.id))
-      setActiveGroup(parentGroup.id)
-    }
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const element = document.getElementById(`section-${sectionId}`)
-        element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      })
-    })
-  }
-
-  // Observe sections for active state
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const id = entry.target.id.replace('section-', '')
-            setActiveSection(id)
-          }
-        })
-      },
-      { threshold: 0.5, rootMargin: '-100px 0px -50% 0px' }
-    )
-
-    activeGroupSectionIds.forEach((id) => {
-      const element = document.getElementById(`section-${id}`)
-      if (element) observer.observe(element)
-    })
-
-    return () => observer.disconnect()
-  }, [activeGroupSectionIds])
 
   // Check for updates
   const handleCheckUpdate = async () => {
@@ -1686,109 +1688,115 @@ export default function Settings() {
         : '点击展开查看当前 LX 音源脚本、运行状态与手动切换入口'
 
   return (
-    <div className="flex gap-6 h-full settings-page">
-      {/* Navigation Sidebar */}
-      <aside className="w-48 flex-shrink-0 self-start pt-2 max-h-full overflow-y-auto settings-sidebar">
-        <div className="card p-2 space-y-1">
-          {SETTINGS_NAV_GROUPS.map((group) => {
-            const GroupIcon = group.icon
-            return (
-            <div key={group.id}>
-              <button
-                onClick={() => {
-                  setActiveGroup(group.id)
-                  toggleGroup(group.id)
-                  const firstItem = group.items[0]
-                  if (firstItem) {
-                    setActiveSection(firstItem.id)
-                    requestAnimationFrame(() => {
-                      const el = document.getElementById(`section-${firstItem.id}`)
-                      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                    })
-                  }
-                }}
-                className={cn(
-                  'w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium transition-colors',
-                  activeGroup === group.id
-                    ? 'text-primary-500 font-semibold'
-                    : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-                )}
+    <div className="h-full settings-page">
+      {/* ============ Level 1: Group List (phone settings style) ============ */}
+      {currentNav.level === 1 && (
+        <div className="flex flex-col h-full overflow-y-auto settings-content settings-level-1">
+          <div className="text-center py-6 settings-branding">
+            <h1
+              className="text-4xl font-bold bg-gradient-to-r from-primary-500 via-pink-500 to-orange-400 bg-clip-text text-transparent drop-shadow-lg settings-brand-title"
+              style={{ textShadow: '0 0 40px rgba(250, 45, 72, 0.3)' }}
+            >
+              ZJ-Music
+            </h1>
+            {hitokoto && (
+              <p
+                className="text-sm text-[var(--text-muted)] mt-3 max-w-md mx-auto italic"
+                style={{ animation: 'fadeIn 1s ease-in-out' }}
               >
-                <span className="flex items-center gap-1.5">
-                  <GroupIcon className="w-3.5 h-3.5" />
-                  {group.label}
-                </span>
-                {expandedGroups.has(group.id) ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
-              </button>
-              {expandedGroups.has(group.id) && (
-                <div className="space-y-0.5 mt-0.5">
-                  {group.items.map(({ id, label, icon: Icon }) => (
-                    <button
-                      key={id}
-                      onClick={() => scrollToSection(id)}
-                      className={cn(
-                        'w-full flex items-center gap-3 pl-5 pr-3 py-1.5 rounded-lg text-sm transition-colors text-left',
-                        activeSection === id
-                          ? 'bg-primary-500 text-white'
-                          : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                      )}
-                    >
-                      <Icon className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate">{label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+                「{hitokoto}」
+              </p>
+            )}
+            <style>{`
+              @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
+          </div>
+
+          <div className="px-4 pb-8 max-w-2xl mx-auto w-full">
+            <h1 className="text-2xl font-bold mb-4">设置</h1>
+            <div className="card divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+              {SETTINGS_NAV_GROUPS.map((group) => {
+                const GroupIcon = group.icon
+                return (
+                  <button
+                    key={group.id}
+                    onClick={() => handleGroupClick(group.id)}
+                    className="w-full flex items-center gap-3.5 px-4 py-4 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60 group/settings-row"
+                  >
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-500/10 text-primary-500 flex-shrink-0">
+                      <GroupIcon className="w-5 h-5" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-medium text-[var(--text-primary)]">{group.label}</span>
+                      <span className="block text-xs text-[var(--text-muted)] mt-0.5 truncate">
+                        {group.items.map((item) => item.label).join(' · ')}
+                      </span>
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0 transition-transform group-hover/settings-row:translate-x-0.5" />
+                  </button>
+                )
+              })}
             </div>
-          )})}
+            <p className="text-center text-xs text-[var(--text-muted)] pt-6">© 2025 ZJ-Music · v{APP_VERSION}</p>
+          </div>
         </div>
-      </aside>
+      )}
 
-      {/* Main Content */}
-      <div className="flex-1 space-y-6 overflow-y-auto pb-32 settings-content">
-      {/* Sollin Branding at Top */}
-      <div className="text-center py-8 settings-branding">
-        <h1
-          className="text-6xl font-bold bg-gradient-to-r from-primary-500 via-pink-500 to-orange-400 bg-clip-text text-transparent animate-pulse drop-shadow-lg settings-brand-title"
-          style={{
-            animation: 'shimmer 3s ease-in-out infinite, float 4s ease-in-out infinite',
-            textShadow: '0 0 40px rgba(250, 45, 72, 0.3)',
-          }}
-        >
-          ZJ-Music
-        </h1>
-        {hitokoto && (
-          <p
-            className="text-sm text-[var(--text-muted)] mt-4 max-w-md mx-auto italic"
-            style={{ animation: 'fadeIn 1s ease-in-out' }}
-          >
-            「{hitokoto}」
-          </p>
-        )}
-        <style>{`
-          @keyframes shimmer {
-            0%, 100% { filter: brightness(1) hue-rotate(0deg); }
-            50% { filter: brightness(1.2) hue-rotate(10deg); }
-          }
-          @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-5px); }
-          }
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-        `}</style>
-      </div>
+      {/* ============ Level 2: Section List of a Group ============ */}
+      {currentNav.level === 2 && currentNavGroup && (
+        <div className="flex flex-col h-full overflow-y-auto settings-content settings-level-2">
+          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 bg-[var(--panel-bg)]/95 backdrop-blur-xl px-3 py-3">
+            <button
+              onClick={popNav}
+              className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              返回
+            </button>
+            <h1 className="text-base font-semibold text-[var(--text-primary)]">{currentNavGroup.label}</h1>
+          </div>
+          <div className="px-4 py-4 max-w-2xl mx-auto w-full">
+            <div className="card divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+              {currentNavGroup.items.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => handleSectionClick(currentNavGroup.id, id)}
+                  className="w-full flex items-center gap-3.5 px-4 py-4 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60 group/settings-row"
+                >
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-gray-100 dark:bg-gray-800 text-[var(--text-secondary)] flex-shrink-0">
+                    <Icon className="w-5 h-5" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-[var(--text-primary)]">{label}</span>
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0 transition-transform group-hover/settings-row:translate-x-0.5" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
-      <h1 className="text-3xl font-bold">设置</h1>
+      {/* ============ Level 3: Setting Content ============ */}
+      {currentNav.level === 3 && currentNavGroup && currentNavSection && (
+        <div className="flex flex-col h-full overflow-y-auto settings-content settings-level-3">
+          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 bg-[var(--panel-bg)]/95 backdrop-blur-xl px-3 py-3">
+            <button
+              onClick={popNav}
+              className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              返回
+            </button>
+            <h1 className="text-base font-semibold text-[var(--text-primary)]">{currentNavSection.label}</h1>
+          </div>
+          <div className="flex-1 space-y-6 px-4 py-4 max-w-3xl mx-auto w-full pb-16">
 
       {/* LX Source Management */}
-      <section id="section-source" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('source')}>
+      <section id="section-source" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'source'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between gap-4">
           <div>
             <h2 className="font-semibold flex items-center gap-2">
@@ -1832,14 +1840,16 @@ export default function Settings() {
               {isLoadingLxSourceStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               刷新状态
             </button>
-            <button
-              onClick={() => void handlePickLxSourceScript()}
-              disabled={isPickingLxSourcePath || !lxSourceStatus?.available}
-              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
-            >
-              {isPickingLxSourcePath ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />}
-              选择文件夹并导入
-            </button>
+            {hasElectronApi && (
+              <button
+                onClick={() => void handlePickLxSourceScript()}
+                disabled={isPickingLxSourcePath || !lxSourceStatus?.available}
+                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
+              >
+                {isPickingLxSourcePath ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderOpen className="w-4 h-4" />}
+                选择文件夹并导入
+              </button>
+            )}
             <button
               onClick={() => void handleTestLxSources()}
               disabled={isTestingLxSources || !lxSourceStatus?.available || managedLxSources.length === 0}
@@ -1848,13 +1858,15 @@ export default function Settings() {
               {isTestingLxSources ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
               一键检测
             </button>
-            <button
-              onClick={() => void handleResetLxSourceScript()}
-              disabled={isSavingLxSourcePath || !lxSourceStatus?.available}
-              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm disabled:opacity-60"
-            >
-              {isSavingLxSourcePath ? '处理中...' : '恢复自动检测'}
-            </button>
+            {hasElectronApi && (
+              <button
+                onClick={() => void handleResetLxSourceScript()}
+                disabled={isSavingLxSourcePath || !lxSourceStatus?.available}
+                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm disabled:opacity-60"
+              >
+                {isSavingLxSourcePath ? '处理中...' : '恢复自动检测'}
+              </button>
+            )}
           </div>
 
           {!lxSourceStatus ? (
@@ -1870,17 +1882,19 @@ export default function Settings() {
                   <p className="font-medium">当前环境不支持 LX 音源管理</p>
                   <p className="mt-1 text-xs">
                     {!hasElectronApi
-                      ? '主窗口未注入 electronAPI，请确认当前打开的是 Electron 应用窗口。'
+                      ? '音源脚本只能在桌面版（Electron）中导入和使用。手机/平板端无法运行 LX JS 音源脚本，因此在线播放链接解析不可用；本地音乐、下载缓存仍可正常播放。'
                       : !hasLxSourceStatusMethod
                         ? '当前 Electron 主窗口使用的是旧版 preload，请彻底退出后重启 Electron 进程。'
                         : '请在 Electron 桌面端中使用该功能。'}
                   </p>
                 </div>
-                <div className="text-[11px] leading-5 bg-black/5 dark:bg-white/5 rounded-lg px-3 py-2 break-all">
-                  <p><span className="font-medium">electronAPI:</span> {hasElectronApi ? '已注入' : '未注入'}</p>
-                  <p><span className="font-medium">getLxSourceStatus:</span> {hasLxSourceStatusMethod ? '可用' : '不可用'}</p>
-                  <p><span className="font-medium">methods:</span> {electronApiMethods || '无'}</p>
-                </div>
+                {hasElectronApi && (
+                  <div className="text-[11px] leading-5 bg-black/5 dark:bg-white/5 rounded-lg px-3 py-2 break-all">
+                    <p><span className="font-medium">electronAPI:</span> {hasElectronApi ? '已注入' : '未注入'}</p>
+                    <p><span className="font-medium">getLxSourceStatus:</span> {hasLxSourceStatusMethod ? '可用' : '不可用'}</p>
+                    <p><span className="font-medium">methods:</span> {electronApiMethods || '无'}</p>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1954,32 +1968,61 @@ export default function Settings() {
                       </button>
                     </div>
                     <p className="text-xs text-[var(--text-muted)]">
-                      会先下载脚本到本地用户目录，加入音源列表，并自动切换为当前生效音源。
+                      会先下载脚本内容并保存到应用内，加入音源列表，并自动切换为当前生效音源。
                     </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">导入本地文件夹</label>
-                    <div className="flex flex-col gap-2">
-                      <input
-                        type="text"
-                        value={lxScriptPathInput}
-                        onChange={(event) => setLxScriptPathInput(event.target.value)}
-                        placeholder="输入或选择包含 LX 音源 JS 的文件夹路径"
-                        className="input flex-1 font-mono text-xs"
-                      />
-                      <button
-                        onClick={() => void handleApplyLxSourceScript()}
-                        disabled={isSavingLxSourcePath || !lxScriptPathInput.trim()}
-                        className="px-4 py-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors text-sm disabled:opacity-60"
-                      >
-                        {isSavingLxSourcePath ? '导入中...' : '导入并切换'}
-                      </button>
+                  {hasElectronApi ? (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">导入本地文件夹</label>
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="text"
+                          value={lxScriptPathInput}
+                          onChange={(event) => setLxScriptPathInput(event.target.value)}
+                          placeholder="输入或选择包含 LX 音源 JS 的文件夹路径"
+                          className="input flex-1 font-mono text-xs"
+                        />
+                        <button
+                          onClick={() => void handleApplyLxSourceScript()}
+                          disabled={isSavingLxSourcePath || !lxScriptPathInput.trim()}
+                          className="px-4 py-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors text-sm disabled:opacity-60"
+                        >
+                          {isSavingLxSourcePath ? '导入中...' : '导入并切换'}
+                        </button>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        支持手动输入文件夹路径或点击上方“选择文件夹并导入”；导入后可一键检测可用性。
+                      </p>
                     </div>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      支持手动输入文件夹路径或点击上方“选择文件夹并导入”；导入后可一键检测可用性。
-                    </p>
-                  </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">导入音源文件</label>
+                      <div className="flex flex-col gap-2">
+                        <input
+                          id="lx-source-file-input"
+                          type="file"
+                          accept=".js,.mjs,.cjs"
+                          multiple
+                          className="hidden"
+                          onChange={(event) => {
+                            void handleImportLxSourceFiles(event.target.files)
+                            event.target.value = ''
+                          }}
+                        />
+                        <label
+                          htmlFor="lx-source-file-input"
+                          className="px-4 py-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors text-sm disabled:opacity-60 inline-flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          {isImportingLxSourceUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                          {isImportingLxSourceUrl ? '导入中...' : '选择音源文件并导入'}
+                        </label>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        选择本机保存的 LX 音源 JS 文件（可多选），导入后自动切换为当前生效音源；也可以使用上方 URL 导入。
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2270,7 +2313,7 @@ export default function Settings() {
       </section>
 
       {/* Source switch section */}
-      <section id="section-source-switch" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('source-switch')}>
+      <section id="section-source-switch" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'source-switch'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <RefreshCw className="w-4 h-4" />
@@ -2284,7 +2327,7 @@ export default function Settings() {
       </section>
 
       {/* Dislike rules section */}
-      <section id="section-dislike" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('dislike')}>
+      <section id="section-dislike" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'dislike'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Ban className="w-4 h-4" />
@@ -2361,7 +2404,7 @@ export default function Settings() {
       </section>
 
       {/* Data management section */}
-      <section id="section-data" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('data')}>
+      <section id="section-data" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'data'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Database className="w-4 h-4" />
@@ -2459,7 +2502,7 @@ export default function Settings() {
         </div>
       </section>
 
-      <section id="section-data-sync" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('data-sync')}>
+      <section id="section-data-sync" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'data-sync'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <RefreshCw className="w-4 h-4" />
@@ -2707,7 +2750,7 @@ export default function Settings() {
       </section>
 
       {/* Cache section */}
-      <section id="section-cache" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('cache')}>
+      <section id="section-cache" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'cache'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <HardDrive className="w-4 h-4" />
@@ -2836,7 +2879,7 @@ export default function Settings() {
       </section>
 
       {/* Download section */}
-      <section id="section-download" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('download')}>
+      <section id="section-download" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'download'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Download className="w-4 h-4" />
@@ -3027,7 +3070,7 @@ export default function Settings() {
       </section>
 
       {/* Local Music section */}
-      <section id="section-local-music" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('local-music')}>
+      <section id="section-local-music" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'local-music'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <FolderOpen className="w-4 h-4" />
@@ -3070,7 +3113,7 @@ export default function Settings() {
       </section>
 
       {/* Usage Stats section */}
-      <section id="section-stats" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('stats')}>
+      <section id="section-stats" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'stats'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Database className="w-4 h-4" />
@@ -3100,7 +3143,7 @@ export default function Settings() {
       </section>
 
       {/* Theme section */}
-      <section id="section-appearance" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('appearance')}>
+      <section id="section-appearance" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'appearance'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold">外观</h2>
         </div>
@@ -3157,7 +3200,7 @@ export default function Settings() {
 
       {/* Background customization section */}
       {hasElectronApi && (
-        <section id="section-background" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('background')}>
+        <section id="section-background" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'background'}>
           <div className="p-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="font-semibold flex items-center gap-2">
               <Image className="w-4 h-4" />
@@ -3392,7 +3435,7 @@ export default function Settings() {
       )}
 
       {/* Close behavior section */}
-      <section id="section-close" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('close')}>
+      <section id="section-close" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'close'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Power className="w-4 h-4" />
@@ -3760,7 +3803,7 @@ export default function Settings() {
         </div>
       </section> */}
 
-      <section id="section-shortcut" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('shortcut')}>
+      <section id="section-shortcut" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'shortcut'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -3922,7 +3965,7 @@ export default function Settings() {
       </section>
 
       {/* Audio section */}
-      <section id="section-audio-quality" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('audio-quality')}>
+      <section id="section-audio-quality" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'audio-quality'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Volume2 className="w-4 h-4" />
@@ -3988,7 +4031,7 @@ export default function Settings() {
         </div>
       </section>
 
-      <section id="section-audio-effects" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('audio-effects')}>
+      <section id="section-audio-effects" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'audio-effects'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Sliders className="w-4 h-4" />
@@ -4314,7 +4357,7 @@ export default function Settings() {
       </section>
 
       {/* Audio Output Device */}
-      <section id="section-device" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('device')}>
+      <section id="section-device" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'device'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Speaker className="w-4 h-4" />
@@ -4432,7 +4475,7 @@ export default function Settings() {
       </section>
 
       {/* Update Check */}
-      <section id="section-update" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('update')}>
+      <section id="section-update" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'update'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
@@ -4505,7 +4548,7 @@ export default function Settings() {
 
 
       {/* Announcement History */}
-      <section id="section-announcements" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('announcements')}>
+      <section id="section-announcements" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'announcements'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold flex items-center gap-2">
             <BellRing className="w-4 h-4" />
@@ -4587,7 +4630,7 @@ export default function Settings() {
 
 
       {/* About */}
-      <section id="section-about" className="card overflow-hidden scroll-mt-6" hidden={!activeGroupSectionIds.includes('about')}>
+      <section id="section-about" className="card overflow-hidden scroll-mt-6" hidden={activeSection !== 'about'}>
         <div className="p-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold">关于</h2>
         </div>
@@ -4626,7 +4669,11 @@ export default function Settings() {
           <p className="text-xs text-[var(--text-muted)] pt-2">© 2025 ZJ-Music. 所有数据保存在本地。</p>
         </div>
       </section>
+          </div>
+        </div>
+      )}
 
+      {/* Modals */}
       {showExportSelectionModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -4855,7 +4902,6 @@ export default function Settings() {
         onClose={() => setShowUpdateModal(false)}
         updateInfo={updateInfo}
       />
-      </div>
     </div>
   )
 }

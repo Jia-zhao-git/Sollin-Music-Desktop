@@ -25,3 +25,7 @@ pnpm-debug.log*
 *.crt
 # Agent workspace data (internal memory / working docs, not project source)
 .workbuddy/
+
+# Session scratch / temp files
+.cowork-temp/
+

@@ -895,7 +895,7 @@ export default function NovelReaderPage() {
   const canGoNext = mode === 'scroll' ? true : (Boolean(nextChapter) || currentReaderPage < pages.length)
 
   return (
-    <div className="pb-10 mx-auto max-w-5xl">
+    <div className="pb-10 mx-auto max-w-5xl novel-reader-content" data-tv-arrows="page">
       <div className="sticky top-0 z-20 -mx-2 mb-4 rounded-b-3xl border-x border-b border-black/5 bg-[var(--bg-primary)]/88 px-2 py-3 backdrop-blur-xl dark:border-white/10 sm:-mx-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button onClick={goBackToDetail} className="flex items-center gap-2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors">

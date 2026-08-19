@@ -180,7 +180,36 @@ export const fetchGithubAnnouncement = async(): Promise<GithubAnnouncement | nul
   return history[0] || null
 }
 
+const ANNOUNCEMENT_CACHE_KEY = 'github-announcement-cache-v1'
+const ANNOUNCEMENT_CACHE_TTL_MS = 60 * 60 * 1000
+
+const readAnnouncementCache = (): GithubAnnouncement[] | null => {
+  try {
+    const raw = localStorage.getItem(ANNOUNCEMENT_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { cachedAt?: number; value?: GithubAnnouncement[] }
+    if (typeof parsed?.cachedAt !== 'number' || Date.now() - parsed.cachedAt > ANNOUNCEMENT_CACHE_TTL_MS) {
+      localStorage.removeItem(ANNOUNCEMENT_CACHE_KEY)
+      return null
+    }
+    return Array.isArray(parsed.value) ? parsed.value : null
+  } catch {
+    return null
+  }
+}
+
+const writeAnnouncementCache = (value: GithubAnnouncement[]) => {
+  try {
+    localStorage.setItem(ANNOUNCEMENT_CACHE_KEY, JSON.stringify({ cachedAt: Date.now(), value }))
+  } catch {
+    // ignore quota errors
+  }
+}
+
 export const fetchGithubAnnouncementHistory = async(): Promise<GithubAnnouncement[]> => {
+  const cached = readAnnouncementCache()
+  if (cached) return cached
+
   if (!GITHUB_ANNOUNCEMENT_ISSUE_NUMBER) return []
 
   const repoParts = parseGithubRepo(GITHUB_ANNOUNCEMENT_REPO)
@@ -205,11 +234,13 @@ export const fetchGithubAnnouncementHistory = async(): Promise<GithubAnnouncemen
   const issue = await fetchIssue(owner, repo, issueNumber)
   const issueAnnouncement = issue ? toIssueAnnouncement(issue, issueNumber) : null
 
-  return sortAnnouncements([
+  const result = sortAnnouncements([
     ...filterAuthorComments([
       ...firstPage.comments,
       ...rest.flatMap((page) => page.comments),
     ], issueNumber),
     ...(issueAnnouncement ? [issueAnnouncement] : []),
   ])
+  writeAnnouncementCache(result)
+  return result
 }

@@ -16,6 +16,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   MessageCircle,
   Mic2,
   BarChart3,
@@ -43,6 +44,7 @@ import MiniPlayer from './MiniPlayer'
 import { useUIStore } from '@/stores/uiStore'
 import { usePlayerStore } from '@/stores/playerStore'
 import { usePlaybackProgressStore } from '@/stores/playbackProgressStore'
+import { useTvFocus } from '@/hooks/useTvFocus'
 import { cn } from '@/utils/cn'
 import { resolvePlaylistSourceLabel } from '@/utils/playlistSource'
 import CoverImage from '@/components/ui/CoverImage'
@@ -304,6 +306,7 @@ export default function Layout() {
   const backgroundTextureSrc = appResolvedBg.textureSrc || coverBackdrop.textureSrc || currentSong?.cover || null
   const lyricsTextureSrc = lyricsResolvedBg.textureSrc || coverBackdrop.textureSrc || currentSong?.cover || null
   const { isCompact, isTvLike } = useResponsiveViewport()
+  useTvFocus(!isCompact) // Enable TV D-pad navigation on non-mobile viewports
   const mainScrollRef = useRef<HTMLElement | null>(null)
   const setHomeScrollTop = useUIStore((s) => s.setHomeScrollTop)
 
@@ -541,10 +544,12 @@ export default function Layout() {
           backgroundMode={backgroundSettings.mode}
         />
 
-        {/* Title bar (for Electron) */}
-        <div className="relative z-10">
-          <TitleBar />
-        </div>
+        {/* Title bar (for Electron) - hidden on mobile & TV */}
+        {!isCompact && !isTvLike && (
+          <div className="relative z-10">
+            <TitleBar />
+          </div>
+        )}
 
         {/* Top bar with search */}
         <div className={cn(
@@ -855,7 +860,7 @@ function LyricsProgressSection({
   const duration = usePlaybackProgressStore((state) => state.duration)
 
   return (
-    <div className="mb-6 w-full max-w-xs">
+    <div className="mb-6 w-full max-w-xs max-md:mb-2 max-md:max-w-none max-md:px-5">
       <Slider.Root
         className="group relative flex h-5 w-full touch-none select-none items-center"
         value={[currentTime]}
@@ -1034,7 +1039,7 @@ function LyricsPanel({
       : 'bg-slate-900/10 text-slate-900 hover:bg-slate-900/15'
   )
   const popoverClass = cn(
-    'absolute bottom-full right-0 z-[70] mb-2 max-h-[min(78vh,42rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl p-4 shadow-2xl backdrop-blur-xl',
+    'absolute bottom-full right-0 z-[70] mb-2 max-h-[min(78vh,42rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl p-4 shadow-2xl backdrop-blur-xl max-md:bottom-auto max-md:top-full max-md:mb-0 max-md:mt-2',
     isDarkAppearance ? 'bg-[#14161b]/92 text-white' : 'bg-white/92 text-slate-900'
   )
   const audioTuningPopoverClass = cn(
@@ -1217,8 +1222,8 @@ function LyricsPanel({
       animate={{ y: 0 }}
       exit={{ y: '100%' }}
       transition={{ type: 'tween', duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-      className="fixed inset-0 z-50 flex overflow-hidden"
-      style={{ touchAction: 'none', willChange: 'transform' }}
+      className="fixed inset-0 z-50 flex overflow-hidden max-md:flex-col"
+      style={{ touchAction: 'pan-y', willChange: 'transform' }}
     >
       {/* Dedicated full-screen backdrop so underlying home content never shows through gaps */}
       <div
@@ -1285,13 +1290,28 @@ function LyricsPanel({
         </div>
       )}
 
-      {/* Close button */}
+      {/* Close button (desktop) */}
       <button
         onClick={toggleLyricsPanel}
-        className={cn(surfaceButtonClass, 'absolute right-6 top-6 z-20 h-10 w-10')}
+        className={cn(surfaceButtonClass, 'absolute right-6 top-6 z-20 h-10 w-10 max-md:hidden')}
       >
         <X className="w-6 h-6" />
       </button>
+
+      {/* Mobile top bar (Apple Music style) */}
+      <div className="relative z-20 flex items-center justify-between px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] md:hidden">
+        <button
+          onClick={toggleLyricsPanel}
+          className={cn(surfaceButtonClass, 'flex h-10 w-10 items-center justify-center')}
+          aria-label="关闭歌词面板"
+        >
+          <ChevronDown className="w-6 h-6" />
+        </button>
+        <div className="text-center">
+          <p className={cn('text-xs font-medium uppercase tracking-wider', textMutedClass)}>正在播放</p>
+        </div>
+        <div className="w-10" />
+      </div>
 
       {showAudioTuning && (
         <div className="absolute inset-0 z-[72] flex items-center justify-center px-6 py-10">
@@ -1582,7 +1602,7 @@ function LyricsPanel({
         onClick={() => setLyricsLeftPanelCollapsed(!lyricsLeftPanelCollapsed)}
         className={cn(
           surfaceButtonClass,
-          'absolute left-0 top-1/2 z-20 h-32 w-6 -translate-y-1/2 rounded-l-none rounded-r-xl'
+          'absolute left-0 top-1/2 z-20 h-32 w-6 -translate-y-1/2 rounded-l-none rounded-r-xl max-md:hidden'
         )}
         title={lyricsLeftPanelCollapsed ? '展开歌曲信息' : '收起歌曲信息'}
       >
@@ -1593,12 +1613,14 @@ function LyricsPanel({
       <div
         className={cn(
           'relative z-10 flex flex-col p-6 pt-20 transition-all duration-300',
-          lyricsLeftPanelCollapsed ? 'w-0 overflow-hidden p-0 opacity-0' : 'w-[32%]'
+          lyricsLeftPanelCollapsed
+            ? 'w-0 overflow-hidden p-0 opacity-0 max-md:hidden'
+            : 'w-[32%] max-md:z-20 max-md:w-full max-md:h-auto max-md:flex-row max-md:items-center max-md:gap-3 max-md:px-4 max-md:py-2'
         )}
       >
-        <div className="flex h-full w-full flex-col items-center justify-center px-8 py-10">
+        <div className="flex h-full w-full flex-col items-center justify-center px-8 py-10 max-md:h-auto max-md:flex-row max-md:items-center max-md:gap-3 max-md:px-0 max-md:py-0">
           {/* Album cover */}
-          <div className="mb-8 h-64 w-64 overflow-hidden rounded-2xl shadow-2xl">
+          <div className="mb-8 h-64 w-64 overflow-hidden rounded-2xl shadow-2xl max-md:mb-0 max-md:h-20 max-md:w-20">
             {currentSong?.cover ? (
               <CoverImage
                 key={`default-lyrics-cover-${playbackSessionKey || currentSong.id}`}
@@ -1617,15 +1639,216 @@ function LyricsPanel({
           </div>
 
           {/* Song info */}
-          <div className="mb-6 w-full px-4 text-center">
-            <h2 className={cn('mb-2 truncate text-2xl font-bold', textPrimaryClass)}>
-              {currentSong?.name || '未播放'}
-            </h2>
-            <p className={cn('truncate', textSecondaryClass)}>{currentSong?.artist || '未知歌手'}</p>
+          <div className="mb-6 w-full px-4 text-center max-md:mb-0 max-md:w-auto max-md:min-w-0 max-md:max-w-none max-md:flex-1 max-md:text-left max-md:px-0">
+            <div className="max-md:flex max-md:items-center max-md:gap-2">
+              <div className="max-md:min-w-0 max-md:flex-1">
+                <h2 className={cn('mb-2 truncate text-2xl font-bold max-md:mb-1 max-md:text-lg', textPrimaryClass)}>
+                  {currentSong?.name || '未播放'}
+                </h2>
+                <p className={cn('truncate', textSecondaryClass)}>{currentSong?.artist || '未知歌手'}</p>
+              </div>
 
-            {/* Tab switcher - 歌词/评论切换按钮 */}
+              {/* Mobile: heart + settings (Apple Music style) */}
+              <div className="hidden flex-shrink-0 items-center gap-1 max-md:flex">
+                <button
+                  onClick={handleFavoriteClick}
+                  className={cn(ghostIconButtonClass, 'flex h-9 w-9 items-center justify-center')}
+                  disabled={!currentSong}
+                  aria-label="收藏"
+                >
+                  <Heart
+                    className={cn('h-5 w-5', isSongFavorited && 'fill-primary-500 text-primary-500')}
+                  />
+                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowSettings((prev) => !prev)
+                      setShowAudioTuning(false)
+                    }}
+                    className={cn(surfaceButtonClass, 'flex h-9 w-9 items-center justify-center')}
+                    aria-label="播放器设置"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+                  {showSettings && (
+                <div className={popoverClass}>
+                  <h3 className="mb-3 text-sm font-medium">播放界面</h3>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {PLAYER_MODE_OPTIONS.map(({ id, label, icon: Icon }) => (
+                      <button
+                        key={id}
+                        onClick={() => {
+                          setLyricsPlayerMode(id)
+                          setShowSettings(false)
+                        }}
+                        className={cn(
+                          'flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs transition-colors',
+                          lyricsPlayerMode === id ? switchOnClass : switchOffClass
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <h3 className={cn('mb-3 mt-4 border-t pt-3 text-sm font-medium', isDarkAppearance ? 'border-white/10' : 'border-black/[0.06]')}>歌词设置</h3>
+
+                  {/* Font size */}
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className={cn('text-xs', textSecondaryClass)}>字体大小</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => adjustFontSize(-2)}
+                        className={settingsButtonClass(false)}
+                      >
+                        A-
+                      </button>
+                      <span className={cn('w-8 text-center text-xs', textMutedClass)}>{fontSize}</span>
+                      <button
+                        onClick={() => adjustFontSize(2)}
+                        className={settingsButtonClass(false)}
+                      >
+                        A+
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Text align */}
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className={cn('text-xs', textSecondaryClass)}>对齐方式</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setTextAlign('left')}
+                        className={settingsButtonClass(textAlign === 'left')}
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="3" y1="6" x2="21" y2="6" />
+                          <line x1="3" y1="12" x2="15" y2="12" />
+                          <line x1="3" y1="18" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => setTextAlign('center')}
+                        className={settingsButtonClass(textAlign === 'center')}
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="3" y1="6" x2="21" y2="6" />
+                          <line x1="6" y1="12" x2="18" y2="12" />
+                          <line x1="4" y1="18" x2="20" y2="18" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => setTextAlign('right')}
+                        className={settingsButtonClass(textAlign === 'right')}
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="3" y1="6" x2="21" y2="6" />
+                          <line x1="9" y1="12" x2="21" y2="12" />
+                          <line x1="6" y1="18" x2="21" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Line spacing */}
+                  <div className="flex items-center justify-between">
+                    <span className={cn('text-xs', textSecondaryClass)}>行间距</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setLineSpacing((prev) => Math.max(4, prev - 4))}
+                        className={settingsButtonClass(false)}
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="3" y1="6" x2="21" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                          <line x1="3" y1="14" x2="21" y2="14" />
+                        </svg>
+                      </button>
+                      <span className={cn('w-8 text-center text-xs', textMutedClass)}>{lineSpacing}</span>
+                      <button
+                        onClick={() => setLineSpacing((prev) => Math.min(32, prev + 4))}
+                        className={settingsButtonClass(false)}
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="3" y1="4" x2="21" y2="4" />
+                          <line x1="3" y1="12" x2="21" y2="12" />
+                          <line x1="3" y1="20" x2="21" y2="20" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={cn('mt-3 space-y-2 border-t pt-3', isDarkAppearance ? 'border-white/10' : 'border-black/[0.06]')}>
+                    {lyricSwitchRows.map((item) => {
+                      const enabled = lyricDisplayOptions[item.key]
+
+                      return (
+                        <div key={item.key} className="flex items-center justify-between">
+                          <span className={cn('text-xs', textSecondaryClass)}>{item.label}</span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={enabled}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              toggleLyricDisplayOption(item.key)
+                            }}
+                            className={cn(
+                              'min-w-[4.25rem] rounded-full px-2.5 py-1 text-xs transition-colors',
+                              enabled ? switchOnClass : switchOffClass
+                            )}
+                          >
+                            {enabled ? '已打开' : '未打开'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className={cn('mt-3 space-y-2 border-t pt-3', isDarkAppearance ? 'border-white/10' : 'border-black/[0.06]')}>
+                    <div className="flex items-center justify-between">
+                      <span className={cn('text-xs', textSecondaryClass)}>歌词颜色</span>
+                      <button
+                        onClick={resetLyricColors}
+                        className={cn('rounded-full px-2 py-1 text-[11px] transition-colors', switchOffClass)}
+                      >
+                        重置
+                      </button>
+                    </div>
+                    {lyricColorRows.map((item) => (
+                      <label key={item.key} className="flex items-center justify-between gap-3">
+                        <span className={cn('text-xs', textSecondaryClass)}>{item.label}</span>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              'h-5 w-5 rounded-full border shadow-sm',
+                              isDarkAppearance ? 'border-white/20' : 'border-black/10',
+                            )}
+                            style={{ backgroundColor: lyricColors[item.key] }}
+                          />
+                          <input
+                            type="color"
+                            value={lyricColors[item.key]}
+                            onChange={(event) => updateLyricColor(item.key, event.target.value)}
+                            className="h-7 w-9 cursor-pointer rounded-md border-0 bg-transparent p-0"
+                            aria-label={item.label}
+                          />
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+                </div>
+              </div>
+            </div>
+
+            {/* Tab switcher - 歌词/评论切换按钮 (desktop) */}
             {currentSong && (
-              <div className="mt-4 flex items-center justify-center gap-2">
+              <div className="mt-4 flex items-center justify-center gap-2 max-md:hidden">
                 <button
                   onClick={() => setActiveTab('lyrics')}
                   className={tabButtonClass(activeTab === 'lyrics')}
@@ -1646,7 +1869,8 @@ function LyricsPanel({
             )}
           </div>
 
-          {/* Progress bar */}
+          {/* Progress bar (desktop) */}
+          <div className="max-md:hidden">
           <LyricsProgressSection
             currentSong={currentSong}
             seek={(time) => usePlayerStore.getState().seek(time)}
@@ -1664,9 +1888,10 @@ function LyricsPanel({
             qualityItemClassName={menuItemClass}
             qualityMutedClassName={textMutedClass}
           />
+          </div>
 
           {/* Playback controls */}
-          <div className="mb-6 flex items-center gap-6">
+          <div className="mb-6 flex items-center gap-6 max-md:hidden">
             <button
               onClick={handlePlayModeChange}
               className={cn(
@@ -1690,7 +1915,7 @@ function LyricsPanel({
                 onClick={() => usePlayerStore.getState().togglePlay()}
                 disabled={!currentSong || isLoading}
                 className={cn(
-                  'flex h-16 w-16 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 disabled:opacity-50',
+                  'flex h-16 w-16 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 disabled:opacity-50 max-md:h-14 max-md:w-14',
                   isDarkAppearance ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'
                 )}
               >
@@ -1728,7 +1953,7 @@ function LyricsPanel({
           {/* Volume control — same style as Apple Music / AMLL full player */}
           <div
             className={cn(
-              'mb-6 flex w-full max-w-[300px] items-center gap-3',
+              'mb-6 flex w-full max-w-[300px] items-center gap-3 max-md:hidden',
               isDarkAppearance ? 'text-white/60' : 'text-slate-500'
             )}
             onWheel={handleVolumeWheel}
@@ -1779,7 +2004,7 @@ function LyricsPanel({
           </div>
 
           {/* Add to playlist & Settings */}
-          <div className="flex w-full items-center justify-center gap-2">
+          <div className="flex w-full items-center justify-center gap-2 max-md:hidden">
               <button
                 onClick={() => usePlayerStore.getState().setAudioVisualizationEnabled(!audioEffects.audioVisualizationEnabled)}
                 className={cn(
@@ -2059,7 +2284,9 @@ function LyricsPanel({
       <div
         className={cn(
           'relative z-10 flex flex-col pb-6 pt-20 transition-all duration-300',
-          lyricsLeftPanelCollapsed ? 'w-full px-6' : 'w-[68%] pl-0 pr-6'
+          lyricsLeftPanelCollapsed
+            ? 'w-full px-6 max-md:px-3 max-md:pt-1'
+            : 'w-[68%] pl-0 pr-6 max-md:w-full max-md:flex-1 max-md:min-h-0 max-md:px-3 max-md:pt-1 max-md:pb-3'
         )}
       >
         {/* Lyrics */}
@@ -2085,7 +2312,7 @@ function LyricsPanel({
 
         {/* Comments */}
         {activeTab === 'comments' && currentSong && canShowComments && (
-          <div className="flex-1 overflow-hidden px-8 py-6">
+          <div className="flex-1 overflow-hidden px-8 py-6 max-md:px-3">
             <CommentSection
               song={currentSong}
               maxHeight="calc(100vh - 190px)"
@@ -2094,6 +2321,99 @@ function LyricsPanel({
           </div>
         )}
       </div>
-    </motion.div>
+    
+      {/* Mobile bottom bar (Apple Music style) */}
+      <div className="relative z-10 flex flex-col items-center gap-2 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
+        <div className="w-full">
+          <LyricsProgressSection
+            currentSong={currentSong}
+            seek={(time) => usePlayerStore.getState().seek(time)}
+            sliderTrackClass={sliderTrackClass}
+            sliderRangeClass={sliderRangeClass}
+            sliderThumbClass={sliderThumbClass}
+            textMutedClass={textMutedClass}
+            qualityTriggerClassName={cn(
+              'h-6 min-w-[4.25rem] px-3 text-[11px] backdrop-blur-md',
+              isDarkAppearance
+                ? 'bg-white/10 text-white/80 hover:bg-white/18'
+                : 'bg-slate-900/10 text-slate-700 hover:bg-slate-900/15'
+            )}
+            qualityContentClassName={menuClass}
+            qualityItemClassName={menuItemClass}
+            qualityMutedClassName={textMutedClass}
+          />
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6">
+            <button
+              onClick={handlePlayModeChange}
+              className={cn(
+                ghostIconButtonClass,
+                'flex h-10 w-10 items-center justify-center',
+                playMode !== 'sequence' && 'text-primary-400'
+              )}
+            >
+              {getPlayModeIcon()}
+            </button>
+
+            <button
+              onClick={() => usePlayerStore.getState().playPrevious()}
+              className={cn(surfaceButtonClass, 'h-12 w-12')}
+              disabled={!currentSong}
+            >
+              <SkipBack className="w-6 h-6" />
+            </button>
+
+              <button
+                onClick={() => usePlayerStore.getState().togglePlay()}
+                disabled={!currentSong || isLoading}
+                className={cn(
+                  'flex h-16 w-16 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 disabled:opacity-50 max-md:h-14 max-md:w-14',
+                  isDarkAppearance ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'
+                )}
+              >
+                {isLoading ? (
+                  <div className={cn(
+                    'h-6 w-6 animate-spin rounded-full border-2 border-t-transparent',
+                    isDarkAppearance ? 'border-slate-900' : 'border-white'
+                  )} />
+                ) : isPlaying ? (
+                  <Pause className="w-7 h-7" />
+                ) : (
+                  <Play className="ml-1 w-7 h-7" />
+                )}
+              </button>
+
+            <button
+              onClick={() => usePlayerStore.getState().playNext()}
+              className={cn(surfaceButtonClass, 'h-12 w-12')}
+              disabled={!currentSong}
+            >
+              <SkipForward className="w-6 h-6" />
+            </button>
+
+            
+          </div>
+        </div>
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => setActiveTab('lyrics')}
+            className={tabButtonClass(activeTab === 'lyrics')}
+          >
+            <Mic2 className="w-4 h-4" />
+            歌词
+          </button>
+          {canShowComments && (
+            <button
+              onClick={() => setActiveTab('comments')}
+              className={tabButtonClass(activeTab === 'comments')}
+            >
+              <MessageCircle className="w-4 h-4" />
+              评论
+            </button>
+          )}
+        </div>
+      </div>
+</motion.div>
   )
 }

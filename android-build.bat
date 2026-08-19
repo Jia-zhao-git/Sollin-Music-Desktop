@@ -173,7 +173,7 @@ call gradlew.bat assembleDebug
 set "GRADLE_ERR=%errorlevel%"
 cd ..
 if %GRADLE_ERR% neq 0 goto :build_fail
-call :copy_apk "android\app\build\outputs\apk\debug\app-debug.apk" "ZJ-android-%APP_VER%-debug.apk"
+call :copy_apk "android\app\build\outputs\apk\debug\app-debug.apk" "ZJ-Music-android-%APP_VER%-debug.apk"
 pause
 exit /b 0
 
@@ -193,7 +193,7 @@ set "RELEASE_SRC="
 if exist "android\app\build\outputs\apk\release\app-release.apk" set "RELEASE_SRC=android\app\build\outputs\apk\release\app-release.apk"
 if exist "android\app\build\outputs\apk\release\app-release-unsigned.apk" set "RELEASE_SRC=android\app\build\outputs\apk\release\app-release-unsigned.apk"
 if "%RELEASE_SRC%"=="" goto :build_fail
-call :copy_apk "%RELEASE_SRC%" "ZJ-android-%APP_VER%.apk"
+call :copy_apk "%RELEASE_SRC%" "ZJ-Music-android-%APP_VER%.apk"
 pause
 exit /b 0
 
@@ -211,7 +211,7 @@ set "GRADLE_ERR=%errorlevel%"
 cd ..
 set CAPACITOR_WEB_DIR=
 if %GRADLE_ERR% neq 0 goto :build_fail
-call :copy_apk "android\app\build\outputs\apk\debug\app-debug.apk" "ZJ-tv-%APP_VER%-debug.apk"
+call :copy_apk "android\app\build\outputs\apk\debug\app-debug.apk" "ZJ-Music-tv-%APP_VER%-debug.apk"
 pause
 exit /b 0
 
@@ -233,7 +233,7 @@ set "RELEASE_SRC="
 if exist "android\app\build\outputs\apk\release\app-release.apk" set "RELEASE_SRC=android\app\build\outputs\apk\release\app-release.apk"
 if exist "android\app\build\outputs\apk\release\app-release-unsigned.apk" set "RELEASE_SRC=android\app\build\outputs\apk\release\app-release-unsigned.apk"
 if "%RELEASE_SRC%"=="" goto :build_fail
-call :copy_apk "%RELEASE_SRC%" "ZJ-tv-%APP_VER%.apk"
+call :copy_apk "%RELEASE_SRC%" "ZJ-Music-tv-%APP_VER%.apk"
 pause
 exit /b 0
 

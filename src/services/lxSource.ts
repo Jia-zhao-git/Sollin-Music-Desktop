@@ -2,6 +2,7 @@ import type { AudioQuality, Song, SongPlatform } from '@/types'
 import { isAudioQuality } from '@/constants/audio'
 import { formatTime } from '@/utils/format'
 import type { LxBackupState } from '@/types/backup'
+import { webLxSourceRuntime, type LxWebRequestPayload } from './lxSourceWeb/webLxSourceRuntime'
 
 export interface LxSourceScriptInfo {
   name: string
@@ -165,6 +166,16 @@ class LxSourceService {
     return typeof window !== 'undefined' ? window.electronAPI : undefined
   }
 
+  /**
+   * Mobile / browser builds have no Electron IPC — delegate to the in-renderer
+   * LX source runtime (Web Worker sandbox + IndexedDB persistence).
+   */
+  private getWebRuntime() {
+    if (typeof window === 'undefined') return null
+    if (this.getElectronApi()?.getLxSourceStatus) return null
+    return webLxSourceRuntime
+  }
+
   private normalizeStatus(raw: Partial<Omit<LxSourceStatus, 'available'>> | null | undefined): LxSourceStatus {
     return {
       ...createUnavailableStatus(),
@@ -183,46 +194,68 @@ class LxSourceService {
   }
 
   async getStatus(): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.getStatus()
     const electronApi = this.getElectronApi()
     if (!electronApi?.getLxSourceStatus) return createUnavailableStatus()
     return this.normalizeStatus(await electronApi.getLxSourceStatus())
   }
 
   async setScriptPath(path: string): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.setScriptPath(path)
     const electronApi = this.getElectronApi()
     if (!electronApi?.setLxSourceScriptPath) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.setLxSourceScriptPath(path))
   }
 
   async clearScriptPath(): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.clearScriptPath()
     return this.setScriptPath('')
   }
 
   async pickScriptPath(): Promise<string | null> {
+    const web = this.getWebRuntime()
+    if (web) return web.pickScriptPath()
     const electronApi = this.getElectronApi()
     if (!electronApi?.pickLxSourceScriptPath) throw new Error('LX_SOURCE_UNAVAILABLE')
     return electronApi.pickLxSourceScriptPath()
   }
 
   async importScriptFolder(path: string): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.importScriptFolder(path)
     const electronApi = this.getElectronApi()
     if (!electronApi?.importLxSourceScriptFolder) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.importLxSourceScriptFolder(path))
   }
 
+  async importScriptFile(name: string, script: string): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.importScriptFile(name, script)
+    throw new Error('LX_SOURCE_UNAVAILABLE')
+  }
+
   async testSource(sourceId?: string | null): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.testSource(sourceId)
     const electronApi = this.getElectronApi()
     if (!electronApi?.testLxSource) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.testLxSource(sourceId ?? null))
   }
 
   async importScriptUrl(url: string): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.importScriptUrl(url)
     const electronApi = this.getElectronApi()
     if (!electronApi?.importLxSourceScriptUrl) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.importLxSourceScriptUrl(url))
   }
 
   async exportBackupState(): Promise<LxBackupState> {
+    const web = this.getWebRuntime()
+    if (web) return web.exportBackupState()
     const electronApi = this.getElectronApi()
     if (!electronApi?.exportLxSourceBackupState) {
       return { sources: [], activeSourceId: null }
@@ -235,36 +268,48 @@ class LxSourceService {
   }
 
   async restoreBackupState(payload: LxBackupState): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.restoreBackupState(payload)
     const electronApi = this.getElectronApi()
     if (!electronApi?.restoreLxSourceBackupState) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.restoreLxSourceBackupState(payload))
   }
 
   async setAllowShowUpdateAlert(enable: boolean): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.setAllowShowUpdateAlert(enable)
     const electronApi = this.getElectronApi()
     if (!electronApi?.setLxSourceAllowUpdateAlert) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.setLxSourceAllowUpdateAlert(enable))
   }
 
   async setSourceAllowUpdateAlert(sourceId: string, enable: boolean): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.setSourceAllowUpdateAlert(sourceId, enable)
     const electronApi = this.getElectronApi()
     if (!electronApi?.setLxSourceItemAllowUpdateAlert) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.setLxSourceItemAllowUpdateAlert(sourceId, enable))
   }
 
   async setActiveSource(sourceId: string | null): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.setActiveSource(sourceId)
     const electronApi = this.getElectronApi()
     if (!electronApi?.setLxSourceActiveSource) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.setLxSourceActiveSource(sourceId))
   }
 
   async removeSource(sourceId: string): Promise<LxSourceStatus> {
+    const web = this.getWebRuntime()
+    if (web) return web.removeSource(sourceId)
     const electronApi = this.getElectronApi()
     if (!electronApi?.removeLxSourceItem) throw new Error('LX_SOURCE_UNAVAILABLE')
     return this.normalizeStatus(await electronApi.removeLxSourceItem(sourceId))
   }
 
   async consumeUpdateAlerts(): Promise<LxSourceUpdateAlert[]> {
+    const web = this.getWebRuntime()
+    if (web) return web.consumeUpdateAlerts()
     const electronApi = this.getElectronApi()
     if (!electronApi?.consumeLxSourceUpdateAlerts) return []
     const alerts = await electronApi.consumeLxSourceUpdateAlerts()
@@ -274,6 +319,8 @@ class LxSourceService {
   }
 
   onUpdateAlert(callback: (alert: LxSourceUpdateAlert) => void): () => void {
+    const web = this.getWebRuntime()
+    if (web) return web.onUpdateAlert(callback)
     const electronApi = this.getElectronApi()
     if (!electronApi?.onLxSourceUpdateAlert) return () => undefined
     return electronApi.onLxSourceUpdateAlert((payload) => {
@@ -283,18 +330,34 @@ class LxSourceService {
   }
 
   async getSongUrl(song: Song, quality: AudioQuality, options?: { sourceId?: string | null }) {
-    const electronApi = this.getElectronApi()
-    if (!electronApi?.requestLxSource) throw new Error('LX_SOURCE_UNAVAILABLE')
     if (song.platform === 'local') throw new Error('LX_SOURCE_UNSUPPORTED_PLATFORM')
 
-    const result = await electronApi.requestLxSource({
-      sourceId: options?.sourceId ?? undefined,
+    const requestPayload: LxWebRequestPayload = {
       source: mapPlatformToLx(song.platform),
       action: 'musicUrl',
       info: {
         type: quality,
         musicInfo: buildMusicInfo(song),
       },
+    }
+
+    const web = this.getWebRuntime()
+    if (web) {
+      const result = await web.request(requestPayload, options?.sourceId ?? null)
+      const url = normalizeResultUrl(result)
+      if (!url) return null
+      return {
+        url,
+        quality: normalizeResultQuality(result, quality),
+      }
+    }
+
+    const electronApi = this.getElectronApi()
+    if (!electronApi?.requestLxSource) throw new Error('LX_SOURCE_UNAVAILABLE')
+
+    const result = await electronApi.requestLxSource({
+      sourceId: options?.sourceId ?? undefined,
+      ...requestPayload,
     })
 
     const url = normalizeResultUrl(result)

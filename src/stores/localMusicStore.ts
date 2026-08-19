@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { Song } from '@/types'
 import { useUIStore } from '@/stores/uiStore'
 import { createAppPersistStorage } from '@/services/persistentStorage'
+import { importWebAudioFiles, removeWebAudioFile, isWebLocalSong } from '@/services/webLocalMusic'
 
 export type LocalMusicTagPriority = 'embedded-first' | 'external-first'
 
@@ -19,6 +20,8 @@ type LocalMusicStore = {
   removeFolder: (folderPath: string) => Promise<void>
   clearFolders: () => void
   replaceSong: (song: Song) => void
+  importFiles: (files: FileList | File[]) => Promise<void>
+  removeWebSong: (song: Song) => Promise<void>
 }
 
 const normalizeFolders = (folders: string[]) => (
@@ -162,6 +165,43 @@ export const useLocalMusicStore = create<LocalMusicStore>()(
             if (!changed) return state
             return { songs }
           })
+        },
+
+        importFiles: async (files) => {
+          const imported = await importWebAudioFiles(files)
+          if (!imported.length) {
+            useUIStore.getState().addToast({ type: 'error', message: '没有可导入的音频文件' })
+            return
+          }
+
+          set((state) => {
+            const existing = new Set(state.songs.map((song) => song.id))
+            const merged = [...state.songs]
+            for (const song of imported) {
+              if (existing.has(song.id)) continue
+              existing.add(song.id)
+              merged.push(song)
+            }
+            return {
+              songs: merged,
+              isScanning: false,
+              scanError: null,
+              lastScannedAt: new Date().toISOString(),
+            }
+          })
+          useUIStore.getState().addToast({
+            type: 'success',
+            message: `已导入 ${imported.length} 首本地歌曲`,
+          })
+        },
+
+        removeWebSong: async (song) => {
+          if (!isWebLocalSong(song)) return
+          await removeWebAudioFile(song.id)
+          set((state) => ({
+            songs: state.songs.filter((item) => item.id !== song.id),
+          }))
+          useUIStore.getState().addToast({ type: 'info', message: '已删除本地歌曲' })
         },
       }
     },

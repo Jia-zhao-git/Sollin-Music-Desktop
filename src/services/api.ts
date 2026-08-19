@@ -605,7 +605,9 @@ class SollinAPI {
 
     try {
       const toplists = await officialMusic.getToplists(platform)
-      cache.set(TOPLISTS_CACHE_KEY, toplists, undefined, platform)
+      if (Array.isArray(toplists) && toplists.length > 0) {
+        cache.set(TOPLISTS_CACHE_KEY, toplists, undefined, platform)
+      }
       return toplists
     } catch (error) {
       console.error('Get toplists error:', error)
@@ -624,7 +626,9 @@ class SollinAPI {
 
     try {
       const songs = await officialMusic.getToplistSongs(platform, id)
-      cache.set(TOPLIST_SONGS_CACHE_KEY, songs, undefined, platform, id)
+      if (Array.isArray(songs) && songs.length > 0) {
+        cache.set(TOPLIST_SONGS_CACHE_KEY, songs, undefined, platform, id)
+      }
       return songs
     } catch (error) {
       const cached = this.getCachedToplist(platform, id)
@@ -681,7 +685,9 @@ class SollinAPI {
 
     try {
       const result = await officialMusic.getRecommendPlaylistPage(platform, page, { sortId, tagId })
-      cache.set(RECOMMEND_PLAYLISTS_CACHE_KEY, result, undefined, platform, sortId, tagId, page)
+      if (result.playlists.length > 0) {
+        cache.set(RECOMMEND_PLAYLISTS_CACHE_KEY, result, undefined, platform, sortId, tagId, page)
+      }
       return result
     } catch (error) {
       console.error('Get recommend playlists error:', error)

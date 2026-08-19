@@ -1,5 +1,6 @@
 import { useVideoStore } from '@/stores/videoStore'
 import type { VideoDetail, VideoEpisode } from '@/types/video'
+import { downloadWebVideo } from '@/services/webVideoCache'
 
 type VideoDownloadEventPayload = {
   taskId: string
@@ -84,11 +85,8 @@ class VideoDownloadManagerService {
   async startDownload(video: VideoDetail, episode: VideoEpisode, cacheDirectory?: string): Promise<void> {
     const api = window.electronAPI
     if (!api?.startVideoDownload) {
-      useVideoStore.getState().setActiveDownload(episode.url, {
-        progress: 0,
-        status: 'failed',
-        error: '当前环境不支持视频缓存，请在桌面端使用',
-      })
+      // 手机 / 浏览器：CapacitorHttp 直链下载到 IndexedDB。
+      await this.startWebDownload(video, episode)
       return
     }
 
@@ -120,6 +118,46 @@ class VideoDownloadManagerService {
         status: 'failed',
         error: error instanceof Error ? error.message : '缓存失败',
       })
+    }
+  }
+
+  private async startWebDownload(video: VideoDetail, episode: VideoEpisode): Promise<void> {
+    const store = useVideoStore.getState()
+    const taskId = `dl_${Math.random().toString(36).slice(2, 10)}`
+    this.pendingRef.set(taskId, {
+      videoName: video.name,
+      episodeTitle: episode.title,
+      url: episode.url,
+      videoId: video.id,
+    })
+    this.taskUrlRef.set(taskId, episode.url)
+    this.urlTaskRef.set(episode.url, taskId)
+    store.setActiveDownload(episode.url, { progress: 0, status: 'downloading', taskId })
+
+    try {
+      const { id, size } = await downloadWebVideo(episode.url)
+      store.addDownload({
+        id: `cache:web://${id}`,
+        videoName: video.name,
+        episodeTitle: episode.title,
+        url: episode.url,
+        filePath: `web://${id}`,
+        size,
+        status: 'completed',
+        downloadedAt: Date.now(),
+        videoId: video.id,
+      })
+      store.setActiveDownload(episode.url, { progress: 100, status: 'completed', taskId })
+    } catch (error) {
+      store.setActiveDownload(episode.url, {
+        progress: 0,
+        status: 'failed',
+        error: error instanceof Error ? error.message : '视频缓存失败',
+      })
+    } finally {
+      this.pendingRef.delete(taskId)
+      this.taskUrlRef.delete(taskId)
+      this.urlTaskRef.delete(episode.url)
     }
   }
 

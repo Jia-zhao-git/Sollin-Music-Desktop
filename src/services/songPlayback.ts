@@ -2,6 +2,7 @@ import type { AudioQuality, LyricData, Song } from '@/types'
 import api from '@/services/api'
 import { cache } from '@/services/cache'
 import { buildPlaybackLyricData } from '@/utils/format'
+import { getWebLocalSongId, loadWebAudioFile } from '@/services/webLocalMusic'
 
 export interface SongPlaybackResource {
   song: Song
@@ -122,6 +123,25 @@ export async function resolveSongPlaybackResource(
   },
 ): Promise<SongPlaybackResource> {
   if (song.platform === 'local') {
+    const webSongId = getWebLocalSongId(song)
+    if (webSongId) {
+      // 手机 / 浏览器：音频内容存 IndexedDB，播放时读取为 blob URL。
+      const blob = await loadWebAudioFile(webSongId)
+      if (!blob) {
+        throw new Error('本地音频文件缺失，请重新导入')
+      }
+      const requestUrl = URL.createObjectURL(blob)
+      return {
+        song,
+        requestUrl,
+        streamUrl: requestUrl,
+        actualQuality: null,
+        sourceSwitch: null,
+        toggleSong: null,
+        toggleAlternatives: [],
+      }
+    }
+
     const requestUrl = toFileUrlFromLocalPath(song.localPath)
     if (!requestUrl) {
       throw new Error('本地文件路径无效，无法播放')

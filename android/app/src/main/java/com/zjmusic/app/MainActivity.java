@@ -10,6 +10,10 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Raw HTTP bridge (byte-exact responses, bypasses CapacitorHttp JSON parsing).
+        // MUST be registered BEFORE super.onCreate(): BridgeActivity.onCreate creates the
+        // bridge inside super, so registerPlugin() after super never reaches the bridge.
+        registerPlugin(NativeHttpPlugin.class);
         super.onCreate(savedInstanceState);
         // Edge-to-edge: draw behind status bar and navigation bar
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);

@@ -4,6 +4,7 @@ import { ArrowLeft, FolderOpen, Trash2 } from 'lucide-react'
 import StatusState from '@/components/StatusState'
 import { VideoPlayer } from '@/pages/VideoDetail'
 import { useVideoStore } from '@/stores/videoStore'
+import { isWebCachedPath, getWebCacheId, removeWebVideoFile } from '@/services/webVideoCache'
 import type { VideoDetail, VideoEpisode } from '@/types/video'
 
 // 孤儿缓存文件（磁盘上无元数据的视频）走应用内播放：把本地文件路径合成单集，
@@ -63,10 +64,21 @@ export default function VideoOfflinePlayback() {
   const handleDelete = async () => {
     if (!filePath) return
     if (!window.confirm('确定删除该离线文件吗？此操作不可恢复。')) return
-    try {
-      await window.electronAPI?.deleteVideoCacheItem(filePath)
-    } catch {
-      // 文件可能已被外部移除，忽略后继续清理记录
+    if (isWebCachedPath(filePath)) {
+      const cacheId = getWebCacheId(filePath)
+      if (cacheId) {
+        try {
+          await removeWebVideoFile(cacheId)
+        } catch {
+          // ignore
+        }
+      }
+    } else {
+      try {
+        await window.electronAPI?.deleteVideoCacheItem(filePath)
+      } catch {
+        // 文件可能已被外部移除，忽略后继续清理记录
+      }
     }
     useVideoStore.getState().removeDownload(`cache:${filePath}`)
     navigate(-1)
@@ -102,7 +114,9 @@ export default function VideoOfflinePlayback() {
         <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-3 py-1 text-sm font-semibold text-blue-600 dark:text-blue-300">
           <FolderOpen className="h-3.5 w-3.5" /> 正在离线播放（本地文件）
         </span>
-        <button onClick={handleOpenFolder} className="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">打开所在文件夹</button>
+        {!isWebCachedPath(filePath) && (
+          <button onClick={handleOpenFolder} className="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">打开所在文件夹</button>
+        )}
         <button onClick={handleDelete} className="inline-flex items-center gap-1 rounded-full border border-red-500/20 px-3 py-1 text-sm text-red-500 hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" /> 删除</button>
       </div>
     </div>

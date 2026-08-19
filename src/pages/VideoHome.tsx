@@ -6,6 +6,7 @@ import Poster from '@/components/ui/Poster'
 import StatusState from '@/components/StatusState'
 import videoApi from '@/services/videoApi'
 import { getDefaultVideoSourceId, getGroupedVideoSources, VIDEO_SOURCES, VIDEO_SOURCE_STORAGE_KEY } from '@/services/videoSources'
+import { isWebCachedPath, getWebCacheId, removeWebVideoFile } from '@/services/webVideoCache'
 import { useVideoStore } from '@/stores/videoStore'
 import type { VideoCacheItem, VideoCategory, VideoListItem, VideoListResult } from '@/types/video'
 import { cn } from '@/utils/cn'
@@ -148,6 +149,7 @@ function OfflineSection({
   onOpenFolder,
   onRemove,
   onChangeDir,
+  isWeb,
 }: {
   items: VideoCacheItem[]
   cacheDirectory: string
@@ -156,6 +158,7 @@ function OfflineSection({
   onOpenFolder: (filePath: string) => void
   onRemove: (id: string) => void
   onChangeDir: () => void
+  isWeb?: boolean
 }) {
   return (
     <section className="rounded-[1.75rem] border border-black/5 dark:border-white/10 bg-white/55 dark:bg-gray-950/35 p-4 shadow-sm">
@@ -165,15 +168,17 @@ function OfflineSection({
           <h2 className="text-xl font-black text-[var(--text-primary)]">离线缓存</h2>
           <span className="text-sm text-[var(--text-muted)]">{items.length} 个视频</span>
         </div>
-        <button
-          onClick={onChangeDir}
-          className="inline-flex items-center gap-1.5 rounded-full border border-black/10 dark:border-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
-          title={cacheDirectory ? `当前保存位置：${cacheDirectory}` : '未设置，使用默认位置'}
-        >
-          <FolderOpen className="h-4 w-4" /> 更改保存位置
-        </button>
+        {!isWeb && (
+          <button
+            onClick={onChangeDir}
+            className="inline-flex items-center gap-1.5 rounded-full border border-black/10 dark:border-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
+            title={cacheDirectory ? `当前保存位置：${cacheDirectory}` : '未设置，使用默认位置'}
+          >
+            <FolderOpen className="h-4 w-4" /> 更改保存位置
+          </button>
+        )}
       </div>
-      {cacheDirectory && (
+      {!isWeb && cacheDirectory && (
         <p className="mb-3 truncate rounded-xl bg-black/5 px-3 py-1.5 text-xs text-[var(--text-muted)] dark:bg-white/5" title={cacheDirectory}>保存位置：{cacheDirectory}</p>
       )}
       {items.length === 0 ? (
@@ -188,8 +193,12 @@ function OfflineSection({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <button onClick={() => onPlay(item)} className="inline-flex items-center gap-1 rounded-full bg-blue-500 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-600"><Play className="h-3.5 w-3.5" /> 播放</button>
-                <button onClick={() => onOpen(item.filePath)} className="rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">打开</button>
-                <button onClick={() => onOpenFolder(item.filePath)} className="rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">文件夹</button>
+                {!isWeb && (
+                  <button onClick={() => onOpen(item.filePath)} className="rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">打开</button>
+                )}
+                {!isWeb && (
+                  <button onClick={() => onOpenFolder(item.filePath)} className="rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-sm hover:bg-black/5 dark:hover:bg-white/10">文件夹</button>
+                )}
                 <button onClick={() => onRemove(item.id)} className="inline-flex items-center gap-1 rounded-full border border-red-500/20 px-3 py-1 text-sm text-red-500 hover:bg-red-500/10"><Trash2 className="h-3.5 w-3.5" /> 删除</button>
               </div>
             </div>
@@ -361,6 +370,7 @@ function FeaturedSection({
 
 export default function VideoHome() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const isWebVideoCache = !window.electronAPI?.getVideoCacheDirectory
   const initialKeyword = searchParams.get('wd') || ''
   const initialType = searchParams.get('type') || ''
   const initialArea = searchParams.get('area') || ''
@@ -421,13 +431,21 @@ export default function VideoHome() {
     if (dir) setCacheDirectory(dir)
   }
 
-  // 删除离线缓存：先删磁盘文件（若支持），再清 store 记录。
+  // 删除离线缓存：先删磁盘 / IndexedDB 文件，再清 store 记录（即使删文件失败也清理失效条目）。
   const handleRemoveOffline = async (id: string) => {
-    const api = window.electronAPI
     const item = useVideoStore.getState().downloads.find((entry) => entry.id === id)
-    if (api?.deleteVideoCacheItem && item) {
+    if (item && isWebCachedPath(item.filePath)) {
+      const cacheId = getWebCacheId(item.filePath)
+      if (cacheId) {
+        try {
+          await removeWebVideoFile(cacheId)
+        } catch {
+          // ignore
+        }
+      }
+    } else if (item && window.electronAPI?.deleteVideoCacheItem) {
       try {
-        await api.deleteVideoCacheItem(item.filePath)
+        await window.electronAPI.deleteVideoCacheItem(item.filePath)
       } catch {
         // 文件可能已不存在，忽略后继续清理记录
       }
@@ -625,6 +643,7 @@ export default function VideoHome() {
             onOpenFolder={(filePath) => window.electronAPI?.showVideoCacheItemInFolder(filePath)}
             onRemove={handleRemoveOffline}
             onChangeDir={changeCacheDir}
+            isWeb={isWebVideoCache}
           />
         </div>
       )}

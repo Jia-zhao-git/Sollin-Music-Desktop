@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Play, Pause, Volume2, VolumeX, Maximize, Loader2, MessageCircle } from 'lucide-react'
+import { X, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2, MessageCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import neteaseAuthApi, { NETEASE_COMMENT_TYPES } from '@/services/neteaseAuth'
 import { usePlayerStore } from '@/stores/playerStore'
 import CommentSection from '@/components/CommentSection'
+import { lockLandscape, unlockOrientation } from '@/services/screenOrientation'
 
 interface MvPlayerModalProps {
     isOpen: boolean
@@ -24,6 +25,7 @@ export default function MvPlayerModal({ isOpen, onClose, mvId, mvName, artistNam
     const [duration, setDuration] = useState(0)
     const [showControls, setShowControls] = useState(true)
     const [showComments, setShowComments] = useState(false)
+    const [isFullscreen, setIsFullscreen] = useState(false)
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     const { pause: pauseMusic, resume: resumeMusic, isPlaying: isMusicPlaying, currentSong } = usePlayerStore()
@@ -153,12 +155,29 @@ export default function MvPlayerModal({ isOpen, onClose, mvId, mvName, artistNam
         setCurrentTime(time)
     }
 
+    const containerRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement))
+        document.addEventListener('fullscreenchange', handleFullscreenChange)
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }, [])
+
     const toggleFullscreen = () => {
-        if (!videoRef.current) return
         if (document.fullscreenElement) {
             document.exitFullscreen()
+            void unlockOrientation()
+            const orientation = screen.orientation as ScreenOrientation & { unlock?: () => void }
+            if (orientation?.unlock) {
+                try { orientation.unlock() } catch { /* ignore */ }
+            }
         } else {
-            videoRef.current.requestFullscreen()
+            containerRef.current?.requestFullscreen()
+            void lockLandscape()
+            const orientation = screen.orientation as ScreenOrientation & { lock?: (mode: string) => Promise<void> }
+            if (orientation?.lock) {
+                try { void orientation.lock('landscape') } catch { /* ignore */ }
+            }
         }
     }
 
@@ -196,7 +215,7 @@ export default function MvPlayerModal({ isOpen, onClose, mvId, mvName, artistNam
                     </button>
 
                     {/* Video container */}
-                    <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
+                    <div ref={containerRef} className="relative aspect-video bg-black rounded-xl overflow-hidden fullscreen-video-container">
                         {isLoading && (
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <Loader2 className="w-12 h-12 text-white animate-spin" />
@@ -303,7 +322,7 @@ export default function MvPlayerModal({ isOpen, onClose, mvId, mvName, artistNam
                                                     <MessageCircle className="w-6 h-6" />
                                                 </button>
                                                 <button onClick={toggleFullscreen} className="text-white hover:text-white/80">
-                                                    <Maximize className="w-6 h-6" />
+                                                    {isFullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
                                                 </button>
                                             </div>
                                         </div>

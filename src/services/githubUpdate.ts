@@ -86,7 +86,36 @@ const isGithubRateLimited = (response: Response) => (
   && response.headers.get('X-RateLimit-Remaining') === '0'
 )
 
+const UPDATE_CACHE_KEY = 'github-update-cache-v1'
+const UPDATE_CACHE_TTL_MS = 60 * 60 * 1000
+
+const readUpdateCache = (): GithubUpdateInfo | null => {
+  try {
+    const raw = localStorage.getItem(UPDATE_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { cachedAt?: number; value?: GithubUpdateInfo }
+    if (typeof parsed?.cachedAt !== 'number' || Date.now() - parsed.cachedAt > UPDATE_CACHE_TTL_MS) {
+      localStorage.removeItem(UPDATE_CACHE_KEY)
+      return null
+    }
+    return parsed.value || null
+  } catch {
+    return null
+  }
+}
+
+const writeUpdateCache = (value: GithubUpdateInfo) => {
+  try {
+    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify({ cachedAt: Date.now(), value }))
+  } catch {
+    // ignore quota errors
+  }
+}
+
 export const checkGithubUpdate = async(currentVersion = APP_VERSION): Promise<GithubUpdateInfo> => {
+  const cached = readUpdateCache()
+  if (cached) return cached
+
   const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
     headers: {
       Accept: 'application/vnd.github+json',
@@ -94,15 +123,17 @@ export const checkGithubUpdate = async(currentVersion = APP_VERSION): Promise<Gi
   })
 
   if (!response.ok) {
+    const fallback: GithubUpdateInfo = {
+      hasUpdate: false,
+      latestVersion: currentVersion,
+      releaseNotes: [],
+      downloadUrl: `https://github.com/${GITHUB_REPO}/releases`,
+      releaseUrl: `https://github.com/${GITHUB_REPO}/releases`,
+    }
     if (isGithubRateLimited(response)) {
       console.debug('GitHub Release 检查跳过：API rate limit exceeded')
-      return {
-        hasUpdate: false,
-        latestVersion: currentVersion,
-        releaseNotes: [],
-        downloadUrl: `https://github.com/${GITHUB_REPO}/releases`,
-        releaseUrl: `https://github.com/${GITHUB_REPO}/releases`,
-      }
+      writeUpdateCache(fallback)
+      return fallback
     }
     throw new Error(`GitHub Release 检查失败：${response.status}`)
   }
@@ -111,8 +142,8 @@ export const checkGithubUpdate = async(currentVersion = APP_VERSION): Promise<Gi
   const latestVersion = normalizeVersion(release.tag_name || release.name || '')
   const releaseUrl = release.html_url || `https://github.com/${GITHUB_REPO}/releases`
 
-  if (!latestVersion) {
-    return {
+  const result: GithubUpdateInfo = !latestVersion
+    ? {
       hasUpdate: false,
       latestVersion: currentVersion,
       releaseNotes: [],
@@ -120,14 +151,14 @@ export const checkGithubUpdate = async(currentVersion = APP_VERSION): Promise<Gi
       releaseUrl,
       publishedAt: release.published_at,
     }
-  }
-
-  return {
-    hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
-    latestVersion,
-    releaseNotes: parseReleaseNotes(release.body),
-    downloadUrl: pickDownloadUrl(release),
-    releaseUrl,
-    publishedAt: release.published_at,
-  }
+    : {
+      hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+      latestVersion,
+      releaseNotes: parseReleaseNotes(release.body),
+      downloadUrl: pickDownloadUrl(release),
+      releaseUrl,
+      publishedAt: release.published_at,
+    }
+  writeUpdateCache(result)
+  return result
 }

@@ -15,6 +15,12 @@ export interface HttpResponse {
   bodyBase64?: string
 }
 
+export interface HttpBufferResponse {
+  status: number
+  headers: Record<string, string>
+  data: Uint8Array
+}
+
 const normalizeHeaders = (headers: Headers): Record<string, string> => {
   const result: Record<string, string> = {}
   headers.forEach((value, key) => {
@@ -54,6 +60,32 @@ const canUseCapacitorHttp = () => {
   }
 }
 
+/**
+ * Custom native bridge (NativeHttpPlugin) that returns byte-exact base64 for EVERY
+ * content type, bypassing CapacitorHttp's JSON auto-parse. Registered from MainActivity.
+ */
+const getNativeHttp = (): ((options: HttpRequestOptions) => Promise<{
+  status: number
+  headers: Record<string, string>
+  data: string
+}>) | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    if (Capacitor.isNativePlatform?.() !== true) return null
+    const plugin = (Capacitor as any).registerPlugin?.('NativeHttp')
+    if (!plugin?.request) return null
+    return (options: HttpRequestOptions) => plugin.request({
+      url: options.url,
+      method: options.method || 'GET',
+      headers: options.headers,
+      body: options.body,
+      timeoutMs: options.timeoutMs ?? 20000,
+    })
+  } catch {
+    return null
+  }
+}
+
 const fetchInCapacitor = async (options: HttpRequestOptions): Promise<HttpResponse> => {
   const response = await CapacitorHttp.request({
     url: options.url,
@@ -72,6 +104,94 @@ const fetchInCapacitor = async (options: HttpRequestOptions): Promise<HttpRespon
   }
 }
 
+const base64ToBytes = (base64: string): Uint8Array => {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+const fetchBufferInCapacitor = async (options: HttpRequestOptions): Promise<HttpBufferResponse> => {
+  const response = await CapacitorHttp.request({
+    url: options.url,
+    method: options.method || 'GET',
+    headers: options.headers,
+    data: options.body,
+    responseType: 'arraybuffer',
+    readTimeout: options.timeoutMs,
+    connectTimeout: options.timeoutMs,
+  })
+
+  let data: Uint8Array
+  if (typeof response.data === 'string') {
+    // Capacitor native returns base64 for arraybuffer responses.
+    data = base64ToBytes(response.data)
+  } else if (response.data instanceof ArrayBuffer) {
+    data = new Uint8Array(response.data)
+  } else if (response.data != null) {
+    // Capacitor Android: when the response Content-Type is application/json it parses the
+    // body into a JS object and ignores responseType entirely (HttpRequestHandler.readData).
+    // Re-serialize so the caller still receives the raw JSON bytes.
+    const raw = typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+    data = new TextEncoder().encode(raw)
+  } else {
+    data = new Uint8Array(0)
+  }
+
+  return {
+    status: response.status,
+    headers: response.headers || {},
+    data,
+  }
+}
+
+const fetchBufferInNative = async (options: HttpRequestOptions): Promise<HttpBufferResponse> => {
+  const nativeHttp = getNativeHttp()
+  if (!nativeHttp) throw new Error('NativeHttp unavailable')
+  const response = await nativeHttp(options)
+  return {
+    status: typeof response?.status === 'number' ? response.status : 0,
+    headers: response?.headers || {},
+    data: typeof response?.data === 'string' && response.data
+      ? base64ToBytes(response.data)
+      : new Uint8Array(0),
+  }
+}
+
+const fetchBufferInBrowser = async (options: HttpRequestOptions, useDevProxy = false): Promise<HttpBufferResponse> => {
+  const response = await fetch(useDevProxy ? toDevProxyUrl(options.url) : options.url, {
+    method: options.method || 'GET',
+    headers: options.headers,
+    body: options.body,
+    signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
+  })
+  const buffer = await response.arrayBuffer()
+  return {
+    status: response.status,
+    headers: normalizeHeaders(response.headers),
+    data: new Uint8Array(buffer),
+  }
+}
+
+const fetchBufferInElectron = async (options: HttpRequestOptions): Promise<HttpBufferResponse> => {
+  const electronApi = typeof window !== 'undefined' ? (window.electronAPI as any) : undefined
+  const response = await electronApi.httpRequest({
+    url: options.url,
+    method: options.method || 'GET',
+    headers: options.headers,
+    body: options.body,
+    timeoutMs: options.timeoutMs,
+  })
+  const bodyBase64 = typeof response?.bodyBase64 === 'string' ? response.bodyBase64 : ''
+  return {
+    status: typeof response?.status === 'number' ? response.status : 0,
+    headers: response?.headers || {},
+    data: bodyBase64 ? base64ToBytes(bodyBase64) : new Uint8Array(0),
+  }
+}
+
 export const httpClient = {
   async request(options: HttpRequestOptions): Promise<HttpResponse> {
     const electronApi = typeof window !== 'undefined' ? (window.electronAPI as any) : undefined
@@ -83,12 +203,38 @@ export const httpClient = {
       return fetchInCapacitor(options)
     }
 
-    try {
-      return await fetchInBrowser(options)
-    } catch (error) {
-      if (!canUseDevProxy()) throw error
+    // 浏览器 dev：直接走本地代理，避免每次请求先直连触发 CORS 报错刷屏。
+    if (canUseDevProxy()) {
       return fetchInBrowser(options, true)
     }
+
+    return fetchInBrowser(options)
+  },
+
+  async requestBuffer(options: HttpRequestOptions): Promise<HttpBufferResponse> {
+    const electronApi = typeof window !== 'undefined' ? (window.electronAPI as any) : undefined
+    if (electronApi?.httpRequest) {
+      return fetchBufferInElectron(options)
+    }
+
+    if (canUseCapacitorHttp()) {
+      try {
+        // Prefer the custom native bridge — it preserves raw bytes for every content
+        // type (CapacitorHttp rejects application/json responses whose body is not
+        // valid JSON, e.g. kuwo wbd API / netease eapi encrypted payloads).
+        return await fetchBufferInNative(options)
+      } catch (error) {
+        console.warn('[httpClient] NativeHttp failed, falling back to CapacitorHttp:', error)
+      }
+      return fetchBufferInCapacitor(options)
+    }
+
+    // 浏览器 dev：直接走本地代理，避免 CORS 报错刷屏。
+    if (canUseDevProxy()) {
+      return fetchBufferInBrowser(options, true)
+    }
+
+    return fetchBufferInBrowser(options)
   },
 
   async getJson<T = any>(url: string, headers?: Record<string, string>): Promise<T> {

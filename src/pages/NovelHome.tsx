@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, startTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BookOpen, ChevronLeft, ChevronRight, Clock3, Heart, LibraryBig, Loader2, Plus, Search, SearchX, Sparkles, X } from 'lucide-react'
 import StatusState from '@/components/StatusState'
 import novelApi from '@/services/novelApi'
+import { importNovelFiles } from '@/services/localNovelImport'
 import { getDefaultNovelSourceId, getGroupedNovelSources, NOVEL_SOURCE_STORAGE_KEY } from '@/services/novelSources'
 import { useNovelStore } from '@/stores/novelStore'
 import type { LocalBook, NovelDownloadedBook, NovelListItem, NovelListResult, NovelSourceId } from '@/types/novel'
@@ -171,6 +172,7 @@ function SourceSwitcher({ sourceId, onChange }: { sourceId: NovelSourceId; onCha
 }
 
 export default function NovelHome() {
+  const localFileInputRef = useRef<HTMLInputElement>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const initialKeyword = searchParams.get('wd') || ''
@@ -222,15 +224,27 @@ export default function NovelHome() {
   }, [])
 
   const handleImportLocal = async () => {
-    try {
-      const api = window.electronAPI
-      if (!api?.importLocalNovelFiles) return
-      const books = await api.importLocalNovelFiles()
-      if (books && books.length) {
-        addLocalBooks(books)
+    const api = window.electronAPI
+    if (api?.importLocalNovelFiles) {
+      try {
+        const books = await api.importLocalNovelFiles()
+        if (books && books.length) {
+          addLocalBooks(books)
+        }
+      } catch (err) {
+        console.error('Import local novels failed:', err)
       }
-    } catch (err) {
-      console.error('Import local novels failed:', err)
+      return
+    }
+    // 手机 / 浏览器：文件选择器导入（本地解析 TXT）。
+    localFileInputRef.current?.click()
+  }
+
+  const handleLocalNovelFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    const books = await importNovelFiles(files)
+    if (books.length) {
+      addLocalBooks(books)
     }
   }
 
@@ -311,6 +325,17 @@ export default function NovelHome() {
 
   return (
     <div className="pb-10">
+      <input
+        ref={localFileInputRef}
+        type="file"
+        accept=".txt,.text"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          void handleLocalNovelFiles(event.target.files)
+          event.target.value = ''
+        }}
+      />
       <section className="relative overflow-hidden rounded-[1.5rem] border border-white/15 bg-stone-950 px-4 py-6 text-white shadow-2xl mb-6 sm:rounded-[2rem] sm:px-6 sm:py-8 sm:mb-8">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_5%,rgba(245,158,11,.34),transparent_32%),radial-gradient(circle_at_90%_10%,rgba(120,53,15,.38),transparent_30%),linear-gradient(135deg,rgba(28,25,23,.98),rgba(12,10,9,.99))]" />
         <div className="relative z-10 max-w-3xl">

@@ -1,20 +1,13 @@
 import { Buffer } from 'buffer'
+import httpClient from '@/services/httpClient'
 
-const buildHeadersObject = (headers) => {
-  const result = {}
-  headers.forEach((value, key) => {
-    result[key.toLowerCase()] = value
-  })
-  return result
-}
-
-const buildBody = (options) => {
-  if (options.formData) return options.formData
-  if (options.form) return new URLSearchParams(options.form)
+// 供 httpClient（fetch / dev proxy / CapacitorHttp）使用的字符串 body。
+const buildWebBody = (options) => {
+  if (options.form) return new URLSearchParams(options.form).toString()
   if (options.body == null) return undefined
-  if (typeof options.body === 'string' || options.body instanceof Blob || options.body instanceof FormData || options.body instanceof URLSearchParams) {
-    return options.body
-  }
+  if (typeof options.body === 'string') return options.body
+  if (options.body instanceof URLSearchParams) return options.body.toString()
+  if (options.body instanceof Blob || options.body instanceof FormData) return undefined
   return JSON.stringify(options.body)
 }
 
@@ -44,18 +37,11 @@ const parseBufferBody = (buffer) => {
   }
 }
 
-const parseTextBody = (text) => parseBufferBody(Buffer.from(text || '', 'utf8'))
-
-const parseBody = async(response) => {
-  const buffer = Buffer.from(await response.arrayBuffer())
-  return parseBufferBody(buffer)
-}
-
 const parseElectronBody = (response) => {
   if (typeof response?.bodyBase64 === 'string' && response.bodyBase64) {
     return parseBufferBody(Buffer.from(response.bodyBase64, 'base64'))
   }
-  return parseTextBody(response?.bodyText || '')
+  return parseBufferBody(Buffer.from(response?.bodyText || '', 'utf8'))
 }
 
 export const httpFetch = (url, options = { method: 'get' }) => {
@@ -98,16 +84,18 @@ export const httpFetch = (url, options = { method: 'get' }) => {
         const { raw, body } = parseElectronBody(response)
         handleSuccess(response?.status || 0, '', response?.headers || {}, raw, body)
       })
-      : fetch(url, {
+      : httpClient.requestBuffer({
+        url,
         method: requestMethod,
         headers: requestHeaders,
-        body: buildBody(options),
-        signal: controller.signal,
-        redirect: options.follow_max && options.follow_max > 0 ? 'follow' : 'manual',
-        credentials: options.credentials || 'omit',
-      }).then(async(response) => {
-        const { raw, body } = await parseBody(response)
-        handleSuccess(response.status, response.statusText, buildHeadersObject(response.headers), raw, body)
+        body: buildWebBody(options),
+        timeoutMs: timeout,
+      }).then((response) => {
+        // httpClient 内部已处理：CapacitorHttp 原生请求（手机端绕 CORS）、
+        // 浏览器 dev 的 /__dev_http_proxy 代理（绕 CORS）、Electron 主进程桥。
+        const raw = Buffer.from(response.data)
+        const { body } = parseBufferBody(raw)
+        handleSuccess(response.status, '', response.headers, raw, body)
       })
 
     requestPromise.catch((error) => {

@@ -3,6 +3,7 @@ import CryptoJS from 'crypto-js'
 import type { Song } from '@/types'
 import { parseYrc } from './parsers'
 import type { LyricsResult } from './types'
+import httpClient from '@/services/httpClient'
 
 const EAPI_KEY = 'e82ckenh8dichen8'
 const HOST = 'https://interface.music.163.com'
@@ -114,17 +115,37 @@ const httpRaw = async(
   body?: string,
 ) => {
   const electronHttp = globalThis.window?.electronAPI?.httpRequest
-  if (typeof electronHttp !== 'function') {
-    throw new Error('Netease lyric source requires electronAPI.httpRequest')
-  }
-  const response = await electronHttp({ url, method, headers, body })
-  if (!response) throw new Error('No response')
+  if (typeof electronHttp === 'function') {
+    const response = await electronHttp({ url, method, headers, body })
+    if (!response) throw new Error('No response')
 
-  const status = response.status
-  const setCookies = Array.isArray((response as any).setCookies) ? (response as any).setCookies as string[] : []
-  const bodyBase64 = (response as any).bodyBase64 as string | undefined
-  const bodyBuffer = bodyBase64 ? Buffer.from(bodyBase64, 'base64') : Buffer.from(response.bodyText || '', 'utf8')
-  return { status, headers: response.headers || {}, setCookies, bodyBuffer }
+    const status = response.status
+    const setCookies = Array.isArray((response as any).setCookies) ? (response as any).setCookies as string[] : []
+    const bodyBase64 = (response as any).bodyBase64 as string | undefined
+    const bodyBuffer = bodyBase64 ? Buffer.from(bodyBase64, 'base64') : Buffer.from(response.bodyText || '', 'utf8')
+    return { status, headers: response.headers || {}, setCookies, bodyBuffer }
+  }
+
+  // Non-Electron (mobile Capacitor / browser): use the shared httpClient which
+  // routes through CapacitorHttp (native, no CORS) or the dev proxy.
+  const response = await httpClient.requestBuffer({
+    url,
+    method,
+    headers,
+    body,
+    timeoutMs: 20000,
+  })
+  if (!response) throw new Error('No response')
+  const bodyBuffer = Buffer.from(response.data)
+  // Capacitor exposes set-cookie through response headers; keep cookies so the
+  // anonymous session can still be re-used where the native bridge supports it.
+  const rawSetCookie = (response.headers || {})['set-cookie']
+  const setCookies = typeof rawSetCookie === 'string' && rawSetCookie.trim()
+    ? rawSetCookie.split(',').map((item) => item.trim()).filter(Boolean)
+    : Array.isArray(rawSetCookie)
+      ? rawSetCookie as string[]
+      : []
+  return { status: response.status, headers: response.headers || {}, setCookies, bodyBuffer }
 }
 
 const cookieToString = (cookies: Record<string, string>) =>
@@ -198,6 +219,23 @@ const ensureInit = async(): Promise<void> => {
     const cached = loadSession()
     if (cached) {
       session = cached
+      return
+    }
+
+    // Mobile / browser builds have no Electron bridge. The anonymous login
+    // endpoint responds with an AES-encrypted body while sending
+    // Content-Type: application/json, which CapacitorHttp tries to JSON.parse
+    // and rejects (binary is not valid JSON). The eapi lyric/search endpoints
+    // still return valid encrypted responses without a session, so fall back
+    // to an empty session instead of failing the whole lyric fetch.
+    if (typeof globalThis.window?.electronAPI?.httpRequest !== 'function') {
+      session = {
+        cookies: {},
+        userId: 0,
+        initAt: Date.now(),
+        deviceId: buildDeviceId(),
+        clientSign: buildClientSign(),
+      }
       return
     }
 

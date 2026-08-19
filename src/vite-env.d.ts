@@ -1,13 +1,20 @@
 /// <reference types="vite/client" />
 
 declare module 'node-forge' {
+    interface ByteBuffer {
+        length(): number
+        getBytes(): string
+    }
     namespace pki {
-        function publicKeyFromPem(pem: string): {
-            encrypt(data: string, scheme: string): string
+        interface PublicKey {
+            n: { bitLength(): number }
+            encrypt(data: string | ByteBuffer, scheme: string): string
         }
+        function publicKeyFromPem(pem: string): PublicKey
     }
     namespace util {
         function bytesToHex(bytes: string): string
+        function createBuffer(data?: Uint8Array | ArrayBuffer | string | number[]): ByteBuffer
     }
 }
 

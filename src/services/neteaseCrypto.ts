@@ -5,6 +5,7 @@
 
 import CryptoJS from 'crypto-js'
 import forge from 'node-forge'
+import httpClient from '@/services/httpClient'
 
 // Constants
 const IV = '0102030405060708'
@@ -302,20 +303,21 @@ export async function neteaseRequest(
             }
             setCookies = res.setCookies || []
         } else {
-            // Fallback to fetch (browser dev mode)
-            const res = await fetch(url, {
+            // 非 Electron：走 httpClient（CapacitorHttp 原生绕 CORS / 浏览器 dev 代理）。
+            // 网易云 Cookie 由应用层管理（serializeCookies 已写入请求头），无需浏览器 credentials。
+            const res = await httpClient.request({
+                url,
                 method: 'POST',
                 headers,
                 body,
-                credentials: 'include',
+                timeoutMs: 20000,
             })
             status = res.status
-            responseBody = await res.json()
-            res.headers.forEach((value, key) => {
-                if (key.toLowerCase() === 'set-cookie') {
-                    setCookies.push(value)
-                }
-            })
+            try {
+                responseBody = JSON.parse(res.bodyText)
+            } catch {
+                responseBody = res.bodyText
+            }
         }
 
         // Always update stored cookies from response (for session continuity)

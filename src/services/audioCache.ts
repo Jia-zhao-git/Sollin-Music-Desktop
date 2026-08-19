@@ -4,6 +4,7 @@
  */
 
 import { readAppDoc, writeAppDoc } from '@/services/persistentStorage'
+import httpClient from '@/services/httpClient'
 
 const DB_NAME = 'sollin-audio-cache'
 const DB_VERSION = 1
@@ -228,11 +229,15 @@ class AudioCacheService {
     if (!this.db) return false
 
     try {
-      // Fetch the audio file
-      const response = await fetch(audioUrl)
-      if (!response.ok) return false
+      // Fetch the audio file（httpClient：CapacitorHttp 原生绕 CORS / 浏览器 dev 代理）
+      const response = await httpClient.requestBuffer({ url: audioUrl, method: 'GET', timeoutMs: 30000 })
+      if (response.status && (response.status < 200 || response.status >= 300)) return false
 
-      const blob = await response.blob()
+      const buffer = response.data.buffer.slice(
+        response.data.byteOffset,
+        response.data.byteOffset + response.data.byteLength,
+      ) as ArrayBuffer
+      const blob = new Blob([buffer], { type: 'audio/mpeg' })
       const key = this.getCacheKey(platform, songId)
       const now = Date.now()
 

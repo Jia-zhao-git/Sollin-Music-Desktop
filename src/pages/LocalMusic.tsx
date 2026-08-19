@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -223,6 +223,9 @@ const buildLocalPlaylistId = (prefix: string, id: string) => `local-${prefix}-${
 
 export default function LocalMusic() {
   const navigate = useNavigate()
+  const localFileInputRef = useRef<HTMLInputElement>(null)
+  const localFolderInputRef = useRef<HTMLInputElement>(null)
+  const isWebLocal = !window.electronAPI?.scanLocalMusicFolders
   const {
     folders,
     songs,
@@ -232,9 +235,10 @@ export default function LocalMusic() {
     pickFolders,
     rescanFolders,
     removeFolder,
+    importFiles,
   } = useLocalMusicStore()
   const { playSong, setPlaylist } = usePlayerStore()
-  const { setShowCreatePlaylistModal, setCreatePlaylistMode } = useUIStore()
+  const { setShowCreatePlaylistModal, setCreatePlaylistMode, addToast } = useUIStore()
   const [showLibrarySettings, setShowLibrarySettings] = useState(folders.length === 0)
   const [activeTab, setActiveTab] = useState<BrowseTab>('songs')
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null)
@@ -243,10 +247,39 @@ export default function LocalMusic() {
 
   const topSummary = useMemo(() => {
     if (isScanning) return '正在扫描目录'
-    if (!folders.length) return '还没有添加扫描目录'
+    if (!folders.length && !songs.length) return isWebLocal ? '还没有导入歌曲' : '还没有添加扫描目录'
     if (!songs.length) return '目录已保存，暂时没有识别到歌曲'
     return `${songs.length} 首歌`
-  }, [folders.length, isScanning, songs.length])
+  }, [folders.length, isScanning, isWebLocal, songs.length])
+
+  const handlePickLocalFiles = () => {
+    localFileInputRef.current?.click()
+  }
+
+  const handleLocalFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    await importFiles(files)
+  }
+
+  const handlePickLocalFolder = () => {
+    localFolderInputRef.current?.click()
+  }
+
+  const AUDIO_EXTENSIONS = ['.mp3', '.flac', '.m4a', '.ogg', '.wav', '.aac', '.opus', '.ape', '.wma', '.amr']
+
+  const handleLocalFolderFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    const audioFiles = Array.from(files).filter((file) => {
+      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
+      return AUDIO_EXTENSIONS.includes(ext) || file.type.startsWith('audio/')
+    })
+    if (!audioFiles.length) {
+      addToast({ type: 'warning', message: '所选文件夹中没有找到音频文件' })
+      return
+    }
+    await importFiles(audioFiles)
+    addToast({ type: 'success', message: `已从文件夹导入 ${audioFiles.length} 个音频文件` })
+  }
 
   const sortedSongs = useMemo(() => sortLocalSongs(songs, songSort), [songSort, songs])
 
@@ -451,16 +484,20 @@ export default function LocalMusic() {
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1.5 text-[var(--text-secondary)] dark:bg-white/10 dark:text-[var(--text-secondary)]">
                 {topSummary}
               </span>
-              <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1.5 text-[var(--text-secondary)] dark:bg-white/10 dark:text-[var(--text-secondary)]">
-                {folders.length} 个目录
-              </span>
-              <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1.5 text-[var(--text-secondary)] dark:bg-white/10 dark:text-[var(--text-secondary)]">
-                最近扫描 {formatScannedAt(lastScannedAt)}
-              </span>
+              {!isWebLocal && (
+                <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1.5 text-[var(--text-secondary)] dark:bg-white/10 dark:text-[var(--text-secondary)]">
+                  {folders.length} 个目录
+                </span>
+              )}
+              {!isWebLocal && (
+                <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1.5 text-[var(--text-secondary)] dark:bg-white/10 dark:text-[var(--text-secondary)]">
+                  最近扫描 {formatScannedAt(lastScannedAt)}
+                </span>
+              )}
               {isScanning && (
                 <span className="inline-flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1.5 text-violet-600 dark:text-violet-300">
                   <RefreshCw className="h-4 w-4 animate-spin" />
@@ -471,6 +508,48 @@ export default function LocalMusic() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={localFileInputRef}
+              type="file"
+              accept="audio/*,.mp3,.flac,.m4a,.ogg,.wav,.aac,.opus"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                void handleLocalFiles(event.target.files)
+                event.target.value = ''
+              }}
+            />
+            <input
+              ref={localFolderInputRef}
+              type="file"
+              accept="audio/*,.mp3,.flac,.m4a,.ogg,.wav,.aac,.opus"
+              multiple
+              {...({ webkitdirectory: '', directory: '' } as any)}
+              className="hidden"
+              onChange={(event) => {
+                void handleLocalFolderFiles(event.target.files)
+                event.target.value = ''
+              }}
+            />
+            {isWebLocal && (
+              <button
+                onClick={handlePickLocalFiles}
+                className="btn-primary gap-1.5"
+              >
+                <FolderPlus className="w-4 h-4" />
+                导入音频文件
+              </button>
+            )}
+            {isWebLocal && (
+              <button
+                onClick={handlePickLocalFolder}
+                className="inline-flex items-center gap-2 rounded-2xl border border-violet-300/60 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-600 transition-colors hover:bg-violet-500/15 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20"
+                title="选择文件夹后自动导入其中所有音频文件"
+              >
+                <FolderOpen className="h-4 w-4" />
+                选择文件夹导入
+              </button>
+            )}
             <button
               onClick={() => {
                 setCreatePlaylistMode('local')
@@ -489,14 +568,16 @@ export default function LocalMusic() {
               <Play className="w-4 h-4" />
               播放全部
             </button>
-            <button
-              onClick={() => setShowLibrarySettings((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white/75 px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-white dark:border-gray-700 dark:bg-gray-800/75 dark:text-[var(--text-secondary)] dark:hover:bg-gray-800"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              库设置
-              {showLibrarySettings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
+            {!isWebLocal && (
+              <button
+                onClick={() => setShowLibrarySettings((prev) => !prev)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white/75 px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-white dark:border-gray-700 dark:bg-gray-800/75 dark:text-[var(--text-secondary)] dark:hover:bg-gray-800"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                库设置
+                {showLibrarySettings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -507,7 +588,7 @@ export default function LocalMusic() {
         </div>
       )}
 
-      {showLibrarySettings && (
+      {showLibrarySettings && !isWebLocal && (
         <section className="rounded-3xl border border-white/20 bg-white/45 p-5 backdrop-blur-xl dark:border-gray-700/40 dark:bg-gray-800/40">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-1">

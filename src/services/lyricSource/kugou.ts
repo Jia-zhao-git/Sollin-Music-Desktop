@@ -3,6 +3,7 @@ import CryptoJS from 'crypto-js'
 import type { Song } from '@/types'
 import { parseKrc } from './parsers'
 import type { LyricsResult } from './types'
+import httpClient from '@/services/httpClient'
 
 const KG_SALT = 'LnT6xpN3khm36zse0QzvmgTZ3waWdRSA'
 const SEARCH_SONG_URL = 'http://complexsearch.kugou.com/v2/search/song'
@@ -91,12 +92,18 @@ const httpFetchJson = async <T,>(url: string, init?: RequestInit & { headers?: R
     try { return JSON.parse(text) as T } catch { return text as unknown as T }
   }
 
-  const response = await fetch(url, {
-    ...init,
+  // 非 Electron：走 httpClient（CapacitorHttp 原生绕 CORS / 浏览器 dev 代理）。
+  const response = await httpClient.request({
+    url,
+    method: requestMethod,
     headers,
+    body: typeof init?.body === 'string' ? init.body : undefined,
+    timeoutMs: 20000,
   })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  const text = await response.text()
+  if (response.status && response.status >= 400) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  const text = response.bodyText || ''
   try { return JSON.parse(text) as T } catch { return text as unknown as T }
 }
 
