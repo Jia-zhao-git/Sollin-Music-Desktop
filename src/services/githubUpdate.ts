@@ -120,6 +120,8 @@ export const checkGithubUpdate = async(currentVersion = APP_VERSION): Promise<Gi
     headers: {
       Accept: 'application/vnd.github+json',
     },
+    // 启动时后台检查更新，不能因 GitHub API 被墙/限流而无限挂起（曾导致启动阻塞数分钟）。
+    signal: AbortSignal.timeout(8000),
   })
 
   if (!response.ok) {

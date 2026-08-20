@@ -71,6 +71,7 @@ const fetchIssue = async(owner: string, repo: string, issueNumber: number) => {
     headers: {
       Accept: 'application/vnd.github+json',
     },
+    signal: AbortSignal.timeout(8000),
   })
 
   if (!response.ok) {
@@ -96,6 +97,7 @@ const fetchCommentPage = async(owner: string, repo: string, issueNumber: number,
     headers: {
       Accept: 'application/vnd.github+json',
     },
+    signal: AbortSignal.timeout(8000),
   })
 
   if (!response.ok) {
