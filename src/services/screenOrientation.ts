@@ -15,6 +15,16 @@ export const lockLandscape = async (): Promise<void> => {
   }
 }
 
+/** Lock the app to portrait on native platforms (Android/iOS). */
+export const lockPortrait = async (): Promise<void> => {
+  if (!Capacitor.isNativePlatform?.()) return
+  try {
+    await ScreenOrientation.lock({ orientation: 'portrait' })
+  } catch (error) {
+    console.warn('[screenOrientation] portrait lock failed:', error)
+  }
+}
+
 /** Release the orientation lock (restore auto-rotation / portrait). */
 export const unlockOrientation = async (): Promise<void> => {
   if (!Capacitor.isNativePlatform?.()) return

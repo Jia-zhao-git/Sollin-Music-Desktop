@@ -488,7 +488,7 @@ export default function TopBar() {
     <div className="drag-region flex min-h-14 items-center gap-2 bg-[var(--panel-bg)] px-3 py-2 sm:gap-4 sm:px-6 border-b border-gray-200/30 dark:border-gray-800/50 app-topbar"
       style={{ backdropFilter: 'blur(var(--panel-backdrop-blur))' }}>
       {/* Search Box (with platform selector merged inside) */}
-      <form ref={searchFormRef} onSubmit={handleSearch} className="no-drag min-w-0 flex-1 max-w-xl relative app-topbar-search">
+      <form ref={searchFormRef} onSubmit={handleSearch} className="no-drag min-w-0 flex-1 max-w-xl lg:max-w-2xl xl:max-w-3xl relative app-topbar-search">
         <div
           className={cn(
             'relative flex items-center rounded-full transition-all duration-200',

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, TouchEvent as ReactTouchEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type Hls from 'hls.js'
 import * as Slider from '@radix-ui/react-slider'
-import { ArrowLeft, Clapperboard, Clock3, Download, Film, FolderOpen, Heart, Loader2, Maximize, Minimize, Pause, PictureInPicture2, Play, RotateCcw, Search, SearchX, Star, Trash2, Volume2, VolumeX } from 'lucide-react'
+import { ArrowLeft, Clapperboard, Clock3, Download, Film, FolderOpen, Heart, Loader2, Maximize, Minimize, Pause, PictureInPicture2, Play, RotateCcw, Search, SearchX, Smartphone, Star, Sun, Trash2, Volume2, VolumeX } from 'lucide-react'
 import StatusState from '@/components/StatusState'
 import ReadStateBadge from '@/components/ReadStateBadge'
 import Poster from '@/components/ui/Poster'
@@ -16,7 +16,8 @@ import { videoDownloadManager } from '@/services/videoDownloadManager'
 import type { VideoCacheItem, VideoDetail, VideoEpisode, VideoListItem } from '@/types/video'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
-import { lockLandscape, unlockOrientation } from '@/services/screenOrientation'
+import { lockLandscape, lockPortrait, unlockOrientation } from '@/services/screenOrientation'
+import { useImmersiveStore } from '@/stores/immersiveStore'
 
 const isM3u8 = (url: string) => /\.m3u8(?:$|[?#])/i.test(url)
 const toFileUrl = (filePath: string) => {
@@ -55,6 +56,15 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
   const [showControls, setShowControls] = useState(true)
   const [buffering, setBuffering] = useState(false)
   const [resumePrompt, setResumePrompt] = useState<number | null>(null)
+  // 手机端手势播放：屏幕亮度（CSS filter）与竖屏全屏模式。
+  const [brightness, setBrightness] = useState(1)
+  const [isPortraitFullscreen, setIsPortraitFullscreen] = useState(false)
+  const [gestureHint, setGestureHint] = useState<{ kind: 'seek' | 'volume' | 'brightness'; value: number; label: string } | null>(null)
+  const hintTimerRef = useRef<number | null>(null)
+  const suppressClickRef = useRef(false)
+  const gestureRef = useRef<{ mode: 'seek' | 'volume' | 'brightness' | null; startX: number; startY: number; startTime: number; startVolume: number; startBrightness: number; targetTime: number }>({
+    mode: null, startX: 0, startY: 0, startTime: 0, startVolume: 0.8, startBrightness: 1, targetTime: 0,
+  })
   // 拖拽/点击进度条 seek 期间置 true，屏蔽 timeupdate 把显示进度拉回旧位置（修复「点击进度条会跳、要点一两次才成功」）。
   const seekingRef = useRef(false)
   const { history, upsertHistory } = useVideoStore()
@@ -332,6 +342,116 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
     setPlaybackRate(next)
   }, [])
 
+  // ---- 手机端手势：横向滑动调进度，右侧纵向滑动调音量，左侧纵向滑动调亮度 ----
+  const showGestureHint = useCallback((kind: 'seek' | 'volume' | 'brightness', value: number, label: string) => {
+    setGestureHint({ kind, value, label })
+    if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current)
+    hintTimerRef.current = window.setTimeout(() => setGestureHint(null), 900)
+  }, [])
+
+  const onTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    const element = videoRef.current
+    const touch = event.touches[0]
+    if (!touch || !element) return
+    gestureRef.current = {
+      mode: null,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startTime: element.currentTime || 0,
+      startVolume: element.volume,
+      startBrightness: brightness,
+      targetTime: element.currentTime || 0,
+    }
+  }, [brightness])
+
+  const onTouchMove = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    const element = videoRef.current
+    const touch = event.touches[0]
+    if (!touch || !element) return
+    const g = gestureRef.current
+    const dx = touch.clientX - g.startX
+    const dy = touch.clientY - g.startY
+
+    if (g.mode === null) {
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+        g.mode = 'seek'
+      } else if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
+        g.mode = g.startX < window.innerWidth / 2 ? 'brightness' : 'volume'
+      } else {
+        return
+      }
+    }
+
+    if (g.mode === 'seek') {
+      const width = containerRef.current?.clientWidth || window.innerWidth
+      const max = Number.isFinite(element.duration) && element.duration > 0 ? element.duration : 0
+      const delta = max > 0 ? (dx / width) * max : 0
+      const target = Math.max(0, Math.min(max, g.startTime + delta))
+      // 直接更新进度显示，不频繁触发 seek（避免卡顿），松手时统一 seek。
+      g.targetTime = target
+      setCurrentTime(target)
+      showGestureHint('seek', target, `${formatTime(target)} / ${formatTime(max)}`)
+    } else if (g.mode === 'volume') {
+      const next = Math.max(0, Math.min(1, g.startVolume - dy / 180))
+      changeVolume(next)
+      showGestureHint('volume', next, `音量 ${Math.round(next * 100)}%`)
+    } else if (g.mode === 'brightness') {
+      const next = Math.max(0.1, Math.min(1, g.startBrightness - dy / 260))
+      setBrightness(next)
+      showGestureHint('brightness', next, `亮度 ${Math.round(next * 100)}%`)
+    }
+  }, [changeVolume, showGestureHint])
+
+  const onTouchEnd = useCallback(() => {
+    const g = gestureRef.current
+    if (g.mode === 'seek') {
+      seekTo(g.targetTime)
+    }
+    if (g.mode !== null) {
+      // 滑动后浏览器仍会补发一次 click，抑制它避免误触发播放/暂停。
+      suppressClickRef.current = true
+      window.setTimeout(() => { suppressClickRef.current = false }, 120)
+    }
+    g.mode = null
+    if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current)
+    hintTimerRef.current = window.setTimeout(() => setGestureHint(null), 500)
+  }, [seekTo])
+
+  const handleContainerClick = useCallback(() => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    togglePlay()
+  }, [togglePlay])
+
+  // 竖屏全屏：fill 整个屏幕（竖屏方向），隐藏 App 顶栏/侧栏/底部播放器。
+  const togglePortraitFullscreen = useCallback(() => {
+    setIsPortraitFullscreen((prev) => {
+      const next = !prev
+      useImmersiveStore.getState().setActive(next, next ? 'video' : null)
+      if (next) {
+        // 退出可能的横屏全屏，再锁定竖屏。
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+        void lockPortrait()
+      } else {
+        void unlockOrientation()
+      }
+      return next
+    })
+  }, [])
+
+  // 卸载或离开时退出沉浸模式，避免残留全屏状态。
+  useEffect(() => {
+    return () => {
+      if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current)
+      if (useImmersiveStore.getState().reason === 'video') {
+        useImmersiveStore.getState().setActive(false, null)
+        void unlockOrientation()
+      }
+    }
+  }, [])
+
   useEffect(() => {
     const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement))
     document.addEventListener('fullscreenchange', onFullscreenChange)
@@ -369,7 +489,12 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
   )
 
   return (
-    <div className="overflow-hidden rounded-[1.75rem] bg-black shadow-2xl border border-white/10">
+    <div className={cn(
+      'bg-black',
+      isPortraitFullscreen
+        ? 'fixed inset-0 z-[10000] flex flex-col'
+        : 'overflow-hidden rounded-[1.75rem] shadow-2xl border border-white/10',
+    )}>
       <div
         ref={containerRef}
         tabIndex={0}
@@ -379,12 +504,44 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
           const element = videoRef.current
           if (element && !element.paused) setShowControls(false)
         }}
-        onClick={togglePlay}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onClick={handleContainerClick}
         onDoubleClick={toggleFullscreen}
-        className="video-player-container group relative aspect-video bg-black outline-none"
+        style={{ touchAction: 'none' }}
+        className={cn(
+          'video-player-container group relative bg-black outline-none',
+          isPortraitFullscreen ? 'flex-1' : 'aspect-video',
+        )}
         data-tv-arrows="self"
       >
-        <video ref={videoRef} playsInline className="h-full w-full bg-black" poster={video.cover} />
+        <video ref={videoRef} playsInline className="h-full w-full bg-black" poster={video.cover} style={{ filter: `brightness(${brightness})` }} />
+
+        {/* 竖屏全屏：顶部常驻标题 + 退出按钮 */}
+        {isPortraitFullscreen && (
+          <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 bg-gradient-to-b from-black/80 to-transparent px-3 pt-[max(0.875rem,env(safe-area-inset-top))] pb-10">
+            <button
+              onClick={(event) => { event.stopPropagation(); togglePortraitFullscreen() }}
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              aria-label="退出竖屏全屏"
+            >
+              <Minimize className="h-5 w-5" />
+            </button>
+            <p className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-white/90">{video.name} · {episode.title}</p>
+            <span className="h-10 w-10" />
+          </div>
+        )}
+
+        {/* 手势提示（滑动调进度/音量/亮度） */}
+        {gestureHint && (
+          <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
+            <div className="flex items-center gap-2.5 rounded-2xl bg-black/70 px-4 py-3 text-white backdrop-blur">
+              {gestureHint.kind === 'seek' ? <RotateCcw className="h-5 w-5" /> : gestureHint.kind === 'volume' ? <Volume2 className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+              <span className="text-sm font-semibold tabular-nums">{gestureHint.label}</span>
+            </div>
+          </div>
+        )}
 
         {resumePrompt != null && !error && (
           <div className="absolute inset-0 grid place-items-center bg-black/70 p-6">
@@ -430,7 +587,7 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
         <div
           onClick={(event) => event.stopPropagation()}
           className={cn(
-            'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-3 pt-8 transition-opacity duration-200',
+            'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pt-8 transition-opacity duration-200 sm:px-4',
             'pb-[max(0.75rem,env(safe-area-inset-bottom))]',
             showControls ? 'opacity-100' : 'pointer-events-none opacity-0',
           )}
@@ -449,21 +606,21 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
             <Slider.Thumb className="block h-3.5 w-3.5 rounded-full bg-red-500 shadow-md outline-none transition-transform hover:scale-110" />
           </Slider.Root>
 
-          <div className="mt-1 flex items-center gap-3 text-white">
-            <button onClick={togglePlay} className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15" aria-label={playing ? '暂停' : '播放'}>
+          <div className="mt-1 flex items-center gap-2 text-white sm:gap-3">
+            <button onClick={togglePlay} className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-white/15" aria-label={playing ? '暂停' : '播放'}>
               {playing ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="h-5 w-5" fill="currentColor" />}
             </button>
 
-            <span className="text-xs tabular-nums text-white/90">
+            <span className="shrink-0 text-xs tabular-nums text-white/90">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
 
-            <button onClick={cyclePlaybackRate} className="rounded px-2 py-1 text-xs font-semibold text-white/90 hover:bg-white/15" aria-label="倍速">
+            <button onClick={cyclePlaybackRate} className="shrink-0 rounded px-2 py-1 text-xs font-semibold text-white/90 hover:bg-white/15" aria-label="倍速">
               {playbackRate}x
             </button>
 
-            <div className="ml-auto flex items-center gap-3">
-              <div className="flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2 sm:gap-3">
+              <div className="hidden items-center gap-2 sm:flex">
                 <button onClick={toggleMute} className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15" aria-label={muted ? '取消静音' : '静音'}>
                   {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                 </button>
@@ -481,10 +638,22 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
                 </Slider.Root>
               </div>
 
-              <button onClick={togglePip} className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15" aria-label="画中画" title="画中画">
+              <button onClick={toggleMute} className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15 sm:hidden" aria-label={muted ? '取消静音' : '静音'}>
+                {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+              </button>
+
+              <button onClick={togglePip} className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-white/15" aria-label="画中画" title="画中画">
                 <PictureInPicture2 className="h-5 w-5" />
               </button>
-              <button onClick={toggleFullscreen} className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/15" aria-label="全屏">
+              <button
+                onClick={(event) => { event.stopPropagation(); togglePortraitFullscreen() }}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-white/15"
+                aria-label="竖屏全屏"
+                title="竖屏全屏"
+              >
+                <Smartphone className="h-5 w-5" />
+              </button>
+              <button onClick={(event) => { event.stopPropagation(); toggleFullscreen() }} className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-white/15" aria-label="全屏">
                 {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
               </button>
             </div>
@@ -492,20 +661,22 @@ export function VideoPlayer({ video, episode, onEnded }: { video: VideoDetail; e
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4 text-white">
-        <div className="min-w-0">
-          <p className="text-sm text-white/55">正在播放</p>
-          <h2 className="truncate text-lg font-bold">{video.name} · {episode.title}</h2>
+      {!isPortraitFullscreen && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4 text-white">
+          <div className="min-w-0">
+            <p className="text-sm text-white/55">正在播放</p>
+            <h2 className="truncate text-lg font-bold">{video.name} · {episode.title}</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {historyItem?.currentTime && historyItem.currentTime > 5 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-3 py-1 text-sm text-red-100">
+                <RotateCcw className="h-3.5 w-3.5" /> 已续播
+              </span>
+            )}
+            <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-white/75">{episode.source}</span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {historyItem?.currentTime && historyItem.currentTime > 5 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-3 py-1 text-sm text-red-100">
-              <RotateCcw className="h-3.5 w-3.5" /> 已续播
-            </span>
-          )}
-          <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-white/75">{episode.source}</span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

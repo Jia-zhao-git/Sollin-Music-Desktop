@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Bookmark, BookmarkPlus, Check, ChevronLeft, ChevronRight, Clock, CornerDownLeft, List, Pause, Pencil, Play, Search, SearchX, Settings2, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Bookmark, BookmarkPlus, Check, ChevronLeft, ChevronRight, Clock, CornerDownLeft, List, Maximize, Minimize, Pause, Pencil, Play, Search, SearchX, Settings2, Trash2, X } from 'lucide-react'
 import StatusState from '@/components/StatusState'
 import ReadStateBadge from '@/components/ReadStateBadge'
 import novelApi from '@/services/novelApi'
 import type { LocalBook, NovelDetail, NovelChapter, NovelDownloadedBook, NovelListItem, NovelSourceId } from '@/types/novel'
 import { useNovelStore } from '@/stores/novelStore'
+import { useImmersiveStore } from '@/stores/immersiveStore'
 import { cn } from '@/utils/cn'
 
 const CHARS_PER_PAGE = 1800
@@ -71,7 +72,7 @@ const clampNumber = (value: number, min: number, max: number, fallback: number) 
 // 阅读器的「回顶 / 到底检测 / 平滑下滚」都必须作用在这个容器上，否则在桌面端会完全静默失效。
 const getScrollContainer = (): HTMLElement | null => {
   if (typeof document === 'undefined') return null
-  return document.querySelector<HTMLElement>('.app-content-scroll')
+  return document.querySelector<HTMLElement>('.novel-fullscreen-scroll') ?? document.querySelector<HTMLElement>('.app-content-scroll')
 }
 
 // 跨「切章重挂载」的临时跳转目标（书签跳转 / 续读位置恢复共用）：PageTransition 用 pathname 作 key，
@@ -168,6 +169,7 @@ export default function NovelReaderPage() {
   // 若不持久化，每次切章都会把 autoContinue 重置为 false，表现为「自动续读翻页后自己关掉」。
   const [autoContinue, setAutoContinue] = useState<boolean>(() => readAutoContinue())
   const [showSettings, setShowSettings] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [showToc, setShowToc] = useState(false)
   const [tocKeyword, setTocKeyword] = useState('')
   const [tocJump, setTocJump] = useState('')
@@ -854,7 +856,7 @@ export default function NovelReaderPage() {
     }
     target.addEventListener('scroll', onScroll, { passive: true })
     return () => target.removeEventListener('scroll', onScroll)
-  }, [detail, fetchChapterContent, mode, scheduleSavePosition, setLoadedEndSafe, setLoadedStartSafe, updateActiveChapter])
+  }, [detail, fetchChapterContent, isFullscreen, mode, scheduleSavePosition, setLoadedEndSafe, setLoadedStartSafe, updateActiveChapter])
 
   const jumpToChapterNumber = useCallback(() => {
     const value = Number.parseInt(tocJump, 10)
@@ -866,6 +868,24 @@ export default function NovelReaderPage() {
   }, [chapters, goChapter, tocJump])
 
   const themeStyle = READER_THEMES[theme]
+
+  // 全屏阅读：隐藏 App 顶栏/侧栏/底部播放器，只保留正文 + 极简悬浮工具条。
+  const toggleFullscreenReading = useCallback(() => {
+    setIsFullscreen((prev) => {
+      const next = !prev
+      useImmersiveStore.getState().setActive(next, next ? 'reader' : null)
+      return next
+    })
+  }, [])
+
+  // 离开页面/切章重挂载时退出沉浸模式，避免残留全屏状态。
+  useEffect(() => {
+    return () => {
+      if (useImmersiveStore.getState().reason === 'reader') {
+        useImmersiveStore.getState().setActive(false, null)
+      }
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -894,8 +914,64 @@ export default function NovelReaderPage() {
   const canGoPrev = mode === 'scroll' ? true : (Boolean(prevChapter) || currentReaderPage > 1)
   const canGoNext = mode === 'scroll' ? true : (Boolean(nextChapter) || currentReaderPage < pages.length)
 
+  // 阅读设置面板（全屏/非全屏共用）
+  const readerSettingsPanel = (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl bg-black/5 p-3 text-sm dark:bg-white/5">
+      <div className="flex items-center gap-2">
+        <span className="text-[var(--text-muted)]">字号</span>
+        <button onClick={() => setFontSize((value) => Math.max(15, value - 1))} className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">A-</button>
+        <span className="min-w-8 text-center font-semibold">{fontSize}</span>
+        <button onClick={() => setFontSize((value) => Math.min(24, value + 1))} className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">A+</button>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[var(--text-muted)]">行距</span>
+        {[1.6, 1.95, 2.2].map((value) => (
+          <button key={value} onClick={() => setLineHeight(value)} className={cn('rounded-full border px-3 py-1', lineHeight === value ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>{value}</button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[var(--text-muted)]">版心</span>
+        {([['narrow', '窄'], ['normal', '标准'], ['wide', '宽']] as const).map(([value, label]) => (
+          <button key={value} onClick={() => setContentWidth(value)} className={cn('rounded-full border px-3 py-1', contentWidth === value ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>{label}</button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[var(--text-muted)]">主题</span>
+        {([['paper', '纸白'], ['sepia', '米黄'], ['green', '护眼'], ['dark', '夜间']] as const).map(([value, label]) => (
+          <button key={value} onClick={() => setTheme(value)} className={cn('rounded-full border px-3 py-1', theme === value ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>{label}</button>
+        ))}
+      </div>
+      <span className="text-[var(--text-muted)]">快捷键：←/→、PageUp/PageDown、空格翻页，Esc 返回目录</span>
+    </div>
+  )
+
   return (
-    <div className="pb-10 mx-auto max-w-5xl novel-reader-content" data-tv-arrows="page">
+    <div
+      className={cn(
+        'mx-auto max-w-5xl novel-reader-content',
+        isFullscreen ? 'novel-fullscreen-scroll fixed inset-0 z-[10000] max-w-none overflow-y-auto' : 'pb-10',
+      )}
+      style={isFullscreen ? { backgroundColor: themeStyle.bg } : undefined}
+      data-tv-arrows="page"
+    >
+      {isFullscreen && (
+        <>
+          <div className="fixed inset-x-0 top-0 z-40 px-3 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2" style={{ backgroundColor: themeStyle.bg }}>
+            <div className="flex items-center justify-between gap-3">
+              <button onClick={toggleFullscreenReading} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold" style={{ borderColor: 'currentColor', color: themeStyle.sub }}>
+                <Minimize className="h-4 w-4" /> 退出全屏
+              </button>
+              <p className="min-w-0 flex-1 truncate text-center text-sm font-semibold" style={{ color: themeStyle.sub }}>{title || '正文'}</p>
+              <button onClick={() => setShowSettings((value) => !value)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold" style={{ borderColor: 'currentColor', color: themeStyle.sub }}>
+                <Settings2 className="h-4 w-4" /> 设置
+              </button>
+            </div>
+            {showSettings && <div className="mt-2 rounded-2xl" style={{ color: themeStyle.text }}>{readerSettingsPanel}</div>}
+          </div>
+          <div className="h-16" />
+        </>
+      )}
+      {!isFullscreen && (
       <div className="sticky top-0 z-20 -mx-2 mb-4 rounded-b-3xl border-x border-b border-black/5 bg-[var(--bg-primary)]/88 px-2 py-3 backdrop-blur-xl dark:border-white/10 sm:-mx-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button onClick={goBackToDetail} className="flex items-center gap-2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors">
@@ -924,40 +1000,16 @@ export default function NovelReaderPage() {
             <button onClick={() => setShowSettings((value) => !value)} className="rounded-full border border-black/10 px-3 py-1.5 text-sm font-semibold dark:border-white/10">
               <Settings2 className="inline h-4 w-4" /> 设置
             </button>
+            <button onClick={toggleFullscreenReading} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-1.5 text-sm font-semibold dark:border-white/10" title="全屏阅读">
+              <Maximize className="h-4 w-4" /> 全屏
+            </button>
           </div>
         </div>
-        {showSettings && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl bg-black/5 p-3 text-sm dark:bg-white/5">
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--text-muted)]">字号</span>
-              <button onClick={() => setFontSize((value) => Math.max(15, value - 1))} className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">A-</button>
-              <span className="min-w-8 text-center font-semibold">{fontSize}</span>
-              <button onClick={() => setFontSize((value) => Math.min(24, value + 1))} className="rounded-full border border-black/10 px-3 py-1 dark:border-white/10">A+</button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--text-muted)]">行距</span>
-              {[1.6, 1.95, 2.2].map((value) => (
-                <button key={value} onClick={() => setLineHeight(value)} className={cn('rounded-full border px-3 py-1', lineHeight === value ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>{value}</button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--text-muted)]">版心</span>
-              {([['narrow', '窄'], ['normal', '标准'], ['wide', '宽']] as const).map(([value, label]) => (
-                <button key={value} onClick={() => setContentWidth(value)} className={cn('rounded-full border px-3 py-1', contentWidth === value ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>{label}</button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--text-muted)]">主题</span>
-              {([['paper', '纸白'], ['sepia', '米黄'], ['green', '护眼'], ['dark', '夜间']] as const).map(([value, label]) => (
-                <button key={value} onClick={() => setTheme(value)} className={cn('rounded-full border px-3 py-1', theme === value ? 'border-amber-500 bg-amber-500 text-white' : 'border-black/10 dark:border-white/10')}>{label}</button>
-              ))}
-            </div>
-            <span className="text-[var(--text-muted)]">快捷键：←/→、PageUp/PageDown、空格翻页，Esc 返回目录</span>
-          </div>
-        )}
+        {showSettings && readerSettingsPanel}
       </div>
+      )}
 
-      <section className="overflow-hidden rounded-[1.75rem] border border-black/5 shadow-sm dark:border-white/10" style={{ backgroundColor: themeStyle.bg }}>
+      <section className={cn('overflow-hidden', !isFullscreen && 'rounded-[1.75rem] border border-black/5 shadow-sm dark:border-white/10')} style={{ backgroundColor: themeStyle.bg }}>
         <div className="border-b border-black/5 px-4 py-4 dark:border-white/10 sm:px-6 sm:py-5" style={{ color: themeStyle.sub }}>
           <p className="text-sm">{detail.name} · {detail.author || detail.sourceName}</p>
           <h1 className="mt-1 text-2xl font-black" style={{ color: themeStyle.text }}>{title || '正文'}</h1>
@@ -999,6 +1051,7 @@ export default function NovelReaderPage() {
           )}
         </div>
 
+        {!isFullscreen && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/5 px-4 py-4 dark:border-white/10 sm:px-6 sm:py-5">
           <button onClick={prevPage} disabled={!canGoPrev} className="inline-flex items-center gap-2 rounded-full border border-black/10 px-4 py-2 text-sm font-semibold disabled:opacity-40 dark:border-white/10" style={{ color: themeStyle.text }}>
             <ChevronLeft className="h-4 w-4" /> 上一页/章
@@ -1010,6 +1063,7 @@ export default function NovelReaderPage() {
             下一页/章 <ChevronRight className="h-4 w-4" />
           </button>
         </div>
+        )}
       </section>
 
       <AnimatePresence>

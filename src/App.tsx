@@ -211,19 +211,23 @@ function App() {
     })
 
     // Refresh imported online playlists that opt in to auto update.
-    void refreshAutoUpdateOnlinePlaylists().then((summary) => {
-      if (summary.checked > 0) {
-        console.log('[OnlinePlaylistAutoUpdate] complete:', summary)
-      }
-    }).catch((error) => {
-      console.debug('[OnlinePlaylistAutoUpdate] failed:', error)
-    })
+    // Deferred so startup network/IO doesn't compete with first paint + user input.
+    const startupDeferredTimer = window.setTimeout(() => {
+      void refreshAutoUpdateOnlinePlaylists().then((summary) => {
+        if (summary.checked > 0) {
+          console.log('[OnlinePlaylistAutoUpdate] complete:', summary)
+        }
+      }).catch((error) => {
+        console.debug('[OnlinePlaylistAutoUpdate] failed:', error)
+      })
 
-    // Check for updates on startup
-    void checkForUpdates()
-    void checkAnnouncement()
+      // Check for updates on startup
+      void checkForUpdates()
+      void checkAnnouncement()
+    }, 1500)
 
     return () => {
+      window.clearTimeout(startupDeferredTimer)
       analytics.stop()
       unsubscribeSnapshot()
       unsubscribeStatus()

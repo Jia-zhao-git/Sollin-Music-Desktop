@@ -43,6 +43,7 @@ import Player from './Player'
 import MiniPlayer from './MiniPlayer'
 import { useUIStore } from '@/stores/uiStore'
 import { usePlayerStore } from '@/stores/playerStore'
+import { useImmersiveStore } from '@/stores/immersiveStore'
 import { usePlaybackProgressStore } from '@/stores/playbackProgressStore'
 import { useTvFocus } from '@/hooks/useTvFocus'
 import { cn } from '@/utils/cn'
@@ -307,6 +308,7 @@ export default function Layout() {
   const lyricsTextureSrc = lyricsResolvedBg.textureSrc || coverBackdrop.textureSrc || currentSong?.cover || null
   const { isCompact, isTvLike } = useResponsiveViewport()
   useTvFocus(!isCompact) // Enable TV D-pad navigation on non-mobile viewports
+  const immersive = useImmersiveStore((s) => s.active)
   const mainScrollRef = useRef<HTMLElement | null>(null)
   const setHomeScrollTop = useUIStore((s) => s.setHomeScrollTop)
 
@@ -545,23 +547,25 @@ export default function Layout() {
         />
 
         {/* Title bar (for Electron) - hidden on mobile & TV */}
-        {!isCompact && !isTvLike && (
+        {!immersive && !isCompact && !isTvLike && (
           <div className="relative z-10">
             <TitleBar />
           </div>
         )}
 
         {/* Top bar with search */}
-        <div className={cn(
-          'relative z-30 transition-[margin] duration-300',
-          !isCompact && (sidebarCollapsed ? 'ml-20' : 'ml-56')
-        )}>
-          <TopBar />
-        </div>
+        {!immersive && (
+          <div className={cn(
+            'relative z-30 transition-[margin] duration-300',
+            !isCompact && (sidebarCollapsed ? 'ml-20' : 'ml-56')
+          )}>
+            <TopBar />
+          </div>
+        )}
 
         <div className="flex flex-1 min-h-0 overflow-hidden relative">
           {/* Sidebar */}
-          {!isCompact && <Sidebar />}
+          {!immersive && !isCompact && <Sidebar />}
 
           {/* Main content */}
           <div className={cn(
@@ -589,12 +593,14 @@ export default function Layout() {
           )}
         </div>
 
-        <MobileBottomNav />
+        {!immersive && <MobileBottomNav />}
 
         {/* Player bar - fixed at bottom, wrapper provides spacing */}
-        <div className="relative z-10 h-20 flex-shrink-0">
-          <Player />
-        </div>
+        {!immersive && (
+          <div className="relative z-10 h-20 flex-shrink-0">
+            <Player />
+          </div>
+        )}
 
         {/* Lyrics panel overlay with slide animation */}
         <AnimatePresence>
